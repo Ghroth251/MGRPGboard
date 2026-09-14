@@ -1,0 +1,2439 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>灰蓝的钢神地图棋盘 1.14 · 实时广播版</title>
+    <style>
+        #top-coordinates,
+        #left-coordinates {
+            position: absolute;
+            font-weight: bold;
+            pointer-events: none;
+            font-size: 14px;
+        }
+
+        #top-coordinates {
+            display: grid;
+            height: 20px;
+            top: -20px;
+        }
+
+        #top-coordinates div {
+            text-align: center;
+            line-height: 20px;
+        }
+
+        #left-coordinates {
+            display: grid;
+            left: -35px;
+            width: 35px;
+        }
+
+        #left-coordinates div {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        #container {
+            position: relative;
+            margin: 20px auto;
+        }
+
+        #chessboard {
+            display: grid;
+            border: 3px solid #333;
+            background: #fff;
+        }
+
+        .cell {
+            border: 1px solid #ddd;
+            box-sizing: border-box;
+            z-index: 1;
+            position: relative;
+            overflow: visible;
+        }
+
+        .coordinate-cell {
+            background-color: rgba(255, 166, 0, 0.5);
+            color: rgb(0, 0, 0);
+            font-weight: bold;
+            user-select: none;
+            font-size: 30px;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .control-panel {
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            max-width: 600px;
+        }
+
+        .form-group {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-group label {
+            width: 120px;
+            margin-right: 10px;
+        }
+
+        input[type="number"] {
+            width: 100px;
+            padding: 5px;
+            margin-right: 10px;
+        }
+
+        button {
+            padding: 8px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .delete-btn {
+            position: absolute;
+            z-index: 4;
+            right: -8px;
+            top: 0px;
+            width: 20px;
+            height: 20px;
+            background: red;
+            border-radius: 50%;
+            color: white;
+            text-align: center;
+            cursor: pointer;
+            display: none;
+            font-size: 12px;
+            line-height: 20px;
+        }
+
+        .delete-btn:hover {
+            background: #ff4444;
+        }
+
+        .image-container {
+            /* 保持原有样式并优化 */
+            position: absolute;
+            z-index: 2;
+            width: 80px;
+            height: 120px;
+            transform: translate(-50%, -60%);
+            /* 居中定位 */
+            transition: transform 0.3s ease;
+            cursor: move;
+            pointer-events: auto;
+        }
+
+        .image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            pointer-events: none;
+        }
+
+        .image-container:hover .delete-btn {
+            display: block;
+        }
+
+        #screenshot-canvas {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .edit-mode-active {
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .cell .style-symbol {
+            position: absolute;
+            top: 1px;
+            right: 2px;
+            font-size: 30px;
+            font-weight: bold;
+            pointer-events: none;
+            text-shadow: 0 0 2px white;
+            font-family: 宋体;
+        }
+
+        .mark-color {
+            width: 60px;
+            height: 60px;
+            margin: 8px;
+            border: 2px solid #666;
+            cursor: pointer;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mark-color::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.3;
+        }
+
+        .mark-color.red::after {
+            background: #ff0000;
+        }
+
+        .mark-color.green::after {
+            background: #00ff00;
+        }
+
+        .mark-color.blue::after {
+            background: #0000ff;
+        }
+
+        .mark-color.yellow::after {
+            background: #ffff00;
+        }
+
+        .mark-color.none::after {
+            display: none;
+        }
+
+        .mark-color.selected {
+            border-color: #000;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        .cell .mark-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* 修改右侧面板样式 */
+        #right-panel {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 1000;
+            max-height: 80vh;
+            /* 限制最大高度为视口的80% */
+            overflow-y: auto;
+            /* 添加垂直滚动条 */
+            width: 150px;
+            /* 固定面板宽度 */
+        }
+
+
+        .right-panel-content {
+            background: white;
+            padding: 10px;
+            border: 2px solid #333;
+            display: none;
+        }
+
+        #style-panel {
+            width: 120px;
+        }
+
+        #mark-panel {
+            display: none;
+            grid-auto-flow: column;
+            /* 按列排列 */
+            grid-template-rows: repeat(10, 1fr);
+            /* 每列最多10行 */
+            grid-auto-columns: 100px;
+            /* 每列宽度 */
+            column-gap: 20px;
+            /* 列间距 */
+            max-height: 400px;
+            /* 限制最大高度 */
+            overflow-y: auto;
+            /* 垂直滚动 */
+        }
+
+        /* 修改样式面板的定位方式 */
+        .style-panel {
+            z-index: 20000;
+            background: white;
+            padding: 10px;
+            border: 2px solid #333;
+            display: none;
+            margin-bottom: 10px;
+            /* 添加面板间距 */
+            width: 130px;
+            /* 保持原有宽度 */
+            display: none;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 5px;
+        }
+
+        /* 添加滚动条美化 */
+        #right-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #right-panel::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        #right-panel::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        #right-panel::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .preset-style {
+            width: 80px;
+            height: 80px;
+            border: 1px solid #999;
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .preset-style:hover {
+            transform: scale(1.05);
+        }
+
+        #hint-message {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 4px;
+            display: none;
+            pointer-events: none;
+            z-index: 10000;
+            font-size: 14px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            animation: hint-fade 3s forwards;
+        }
+
+        @keyframes hint-fade {
+            0% {
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+
+        /* ===== 1.13 现代化界面 + WebP 截图优化 ===== */
+        :root {
+            --ui-bg: #eef3f8;
+            --ui-panel: rgba(255, 255, 255, 0.96);
+            --ui-border: #d8e1ec;
+            --ui-text: #263548;
+            --ui-muted: #75859a;
+            --ui-primary: #486b8f;
+            --ui-primary-hover: #385a7c;
+            --ui-danger: #c95757;
+            --ui-shadow: 0 14px 38px rgba(38, 53, 72, 0.13);
+            --ui-radius: 14px;
+        }
+
+        * { box-sizing: border-box; }
+
+        html { min-height: 100%; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+            color: var(--ui-text);
+            background:
+                radial-gradient(circle at 20% 10%, rgba(126, 160, 196, 0.15), transparent 30%),
+                linear-gradient(180deg, #f7f9fc 0%, var(--ui-bg) 100%);
+        }
+
+        .app-titlebar {
+            position: fixed;
+            z-index: 30000;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 62px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 22px;
+            color: #fff;
+            background: linear-gradient(120deg, #2f465f 0%, #496b8d 60%, #5f819f 100%);
+            box-shadow: 0 8px 28px rgba(33, 50, 69, 0.22);
+        }
+
+        .app-titlebar .app-title {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: .04em;
+        }
+
+        .app-titlebar .app-subtitle {
+            font-size: 12px;
+            opacity: .78;
+        }
+
+        #container {
+            position: relative;
+            margin: 94px 210px 46px 360px;
+            filter: drop-shadow(0 10px 18px rgba(43, 62, 82, 0.12));
+        }
+
+        #chessboard {
+            border: 2px solid #43566d;
+            background: #fff;
+            box-shadow: 0 0 0 1px rgba(255,255,255,.9);
+        }
+
+        .cell {
+            border: 1px solid #d4dde7;
+            background-clip: padding-box;
+        }
+
+        .cell:not(.coordinate-cell):hover {
+            outline: 2px solid rgba(72, 107, 143, .32);
+            outline-offset: -2px;
+        }
+
+        .coordinate-cell {
+            background: linear-gradient(145deg, #e7edf4, #d8e2ed);
+            color: #32465d;
+            font-weight: 800;
+            font-size: 24px;
+            border-color: #c6d1dd;
+            text-shadow: 0 1px 0 rgba(255,255,255,.8);
+        }
+
+        .control-panel {
+            position: fixed;
+            z-index: 20000;
+            left: 18px;
+            top: 80px;
+            bottom: 18px;
+            width: 318px;
+            max-width: none;
+            margin: 0;
+            padding: 18px;
+            overflow-y: auto;
+            border: 1px solid rgba(216, 225, 236, .95);
+            border-radius: var(--ui-radius);
+            background: var(--ui-panel);
+            box-shadow: var(--ui-shadow);
+            backdrop-filter: blur(14px);
+        }
+
+        .control-panel h2 {
+            margin: 0 0 15px;
+            font-size: 17px;
+            line-height: 1.25;
+        }
+
+        .section-title {
+            margin: 17px 0 9px;
+            padding-top: 14px;
+            border-top: 1px solid #e7edf3;
+            color: #52657b;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .08em;
+        }
+
+        .form-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin: 9px 0;
+        }
+
+        .form-group.settings-grid {
+            display: grid;
+            grid-template-columns: 58px 1fr 58px 1fr;
+            gap: 8px;
+        }
+
+        .form-group label {
+            width: auto;
+            margin: 0;
+            color: #607187;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        input[type="number"], select {
+            width: 100%;
+            min-width: 0;
+            height: 36px;
+            margin: 0;
+            padding: 0 10px;
+            border: 1px solid var(--ui-border);
+            border-radius: 9px;
+            outline: none;
+            color: var(--ui-text);
+            background: #f9fbfd;
+            font: inherit;
+            transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+        }
+
+        input[type="number"]:focus, select:focus {
+            border-color: #7b9bbd;
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(72, 107, 143, .12);
+        }
+
+        button {
+            min-height: 36px;
+            padding: 8px 13px;
+            border: 1px solid #d4dee9;
+            border-radius: 9px;
+            color: #405369;
+            background: linear-gradient(180deg, #fff, #f4f7fa);
+            box-shadow: 0 2px 6px rgba(45, 63, 82, .06);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 700;
+            transition: transform .15s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            border-color: #aebed0;
+            background: #fff;
+            box-shadow: 0 5px 12px rgba(45, 63, 82, .10);
+        }
+
+        button:active { transform: translateY(0); }
+
+        button.primary {
+            border-color: var(--ui-primary);
+            color: #fff;
+            background: linear-gradient(135deg, #55799d, var(--ui-primary));
+        }
+
+        button.primary:hover { background: linear-gradient(135deg, #496e93, var(--ui-primary-hover)); }
+
+        button.danger-soft {
+            color: #a64a4a;
+            border-color: #ead1d1;
+            background: #fff8f8;
+        }
+
+        .button-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .button-row.three { grid-template-columns: repeat(3, 1fr); }
+
+        .button-row button { width: 100%; }
+
+        .screenshot-tools {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+            align-items: center;
+        }
+
+        .panel-tip {
+            margin-top: 7px;
+            color: var(--ui-muted);
+            font-size: 11px;
+            line-height: 1.55;
+        }
+
+        .delete-btn {
+            right: -6px;
+            top: -5px;
+            width: 22px;
+            height: 22px;
+            line-height: 20px;
+            border: 2px solid white;
+            background: #d25454;
+            box-shadow: 0 3px 8px rgba(116, 34, 34, .25);
+        }
+
+        .edit-mode-active {
+            color: #fff !important;
+            border-color: #55799d !important;
+            background: linear-gradient(135deg, #55799d, #3f668b) !important;
+            box-shadow: 0 0 0 3px rgba(72, 107, 143, .16) !important;
+        }
+
+        #right-panel {
+            position: fixed;
+            right: 18px;
+            top: 80px;
+            bottom: 18px;
+            transform: none;
+            width: 174px;
+            max-height: none;
+            overflow-y: auto;
+            z-index: 21000;
+            pointer-events: none;
+        }
+
+        .style-panel {
+            width: 100% !important;
+            margin: 0;
+            padding: 10px;
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius);
+            background: rgba(255,255,255,.97);
+            box-shadow: var(--ui-shadow);
+            grid-template-columns: 1fr !important;
+            gap: 7px;
+            pointer-events: auto;
+        }
+
+        .preset-style {
+            width: 100%;
+            height: 46px;
+            margin: 0;
+            border: 2px solid rgba(255,255,255,.72);
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 800;
+            box-shadow: inset 0 0 0 1px rgba(61,75,91,.13), 0 2px 5px rgba(35,49,64,.05);
+        }
+
+        .preset-style:hover { transform: translateY(-1px) scale(1.01); }
+
+        .preset-style.is-selected {
+            outline: 3px solid rgba(67, 92, 120, .42);
+            outline-offset: 1px;
+        }
+
+        #mark-panel {
+            grid-auto-flow: row;
+            grid-template-rows: none;
+            grid-template-columns: repeat(2, 1fr) !important;
+            grid-auto-columns: auto;
+            max-height: none;
+            overflow: visible;
+            column-gap: 7px;
+        }
+
+        .mark-color {
+            width: 64px;
+            height: 64px;
+            margin: 4px auto;
+            border-radius: 12px;
+            border-color: #c7d2df;
+            background: #fff;
+        }
+
+        .mark-color.selected {
+            border-color: #354b64;
+            box-shadow: 0 0 0 3px rgba(72, 107, 143, .16);
+        }
+
+        #hint-message {
+            top: 76px;
+            border-radius: 10px;
+            background: rgba(31, 45, 60, .92);
+            box-shadow: 0 8px 24px rgba(19,31,44,.23);
+            backdrop-filter: blur(8px);
+        }
+
+        .control-panel::-webkit-scrollbar, #right-panel::-webkit-scrollbar { width: 7px; }
+        .control-panel::-webkit-scrollbar-track, #right-panel::-webkit-scrollbar-track { background: transparent; }
+        .control-panel::-webkit-scrollbar-thumb, #right-panel::-webkit-scrollbar-thumb {
+            background: #c4d0dc;
+            border-radius: 10px;
+        }
+
+        @media (max-width: 1180px) {
+            .app-titlebar { position: static; }
+            .control-panel {
+                position: relative;
+                left: auto; top: auto; bottom: auto;
+                width: min(720px, calc(100% - 28px));
+                margin: 18px auto;
+            }
+            #container {
+                margin: 26px auto 34px;
+            }
+            #right-panel {
+                position: fixed;
+                top: 76px;
+                right: 12px;
+                bottom: 12px;
+            }
+        }
+
+    
+        /* 1.15 Realtime 联机面板 */
+        .realtime-box {
+            padding: 12px;
+            border: 1px solid #b9c8d8;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #f8fbff 0%, #eef4fa 100%);
+        }
+        .realtime-grid {
+            display: grid;
+            grid-template-columns: 72px minmax(0, 1fr);
+            gap: 8px;
+            align-items: center;
+        }
+        .realtime-grid label {
+            width: auto;
+            margin: 0;
+            color: #53677a;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .realtime-grid input[type="text"] {
+            min-width: 0;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px 9px;
+            border: 1px solid #b7c4d0;
+            border-radius: 8px;
+            background: white;
+            color: #243544;
+            outline: none;
+        }
+        .realtime-grid input[type="text"]:focus {
+            border-color: #587b9a;
+            box-shadow: 0 0 0 3px rgba(88, 123, 154, .12);
+        }
+        .realtime-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .realtime-actions .wide { grid-column: 1 / -1; }
+        .realtime-status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-height: 20px;
+            margin-top: 10px;
+            padding-top: 9px;
+            border-top: 1px dashed #c8d4df;
+            color: #62778a;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        .realtime-dot {
+            flex: 0 0 auto;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #a8b1ba;
+            box-shadow: 0 0 0 3px rgba(168,177,186,.15);
+        }
+        .realtime-dot.online {
+            background: #35a76f;
+            box-shadow: 0 0 0 3px rgba(53,167,111,.14);
+        }
+        .realtime-dot.connecting {
+            background: #d99a2b;
+            box-shadow: 0 0 0 3px rgba(217,154,43,.15);
+        }
+        .realtime-room-badge {
+            display: none;
+            margin-top: 8px;
+            padding: 7px 9px;
+            border-radius: 8px;
+            background: #dfeaf5;
+            color: #36546d;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .03em;
+            word-break: break-all;
+        }
+        body.realtime-viewer #right-panel {
+            opacity: .45;
+            pointer-events: none;
+        }
+        body.realtime-viewer .image-container {
+            pointer-events: none !important;
+        }
+        body.realtime-viewer #chessboard {
+            cursor: default;
+        }
+        button:disabled, input:disabled {
+            cursor: not-allowed !important;
+            opacity: .48;
+        }
+        .viewer-notice {
+            display: none;
+            margin-top: 8px;
+            padding: 8px 9px;
+            border-radius: 8px;
+            background: #fff6dd;
+            border: 1px solid #ead7a3;
+            color: #765f27;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        body.realtime-viewer .viewer-notice { display: block; }
+
+    </style>
+</head>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<body>
+    <div class="app-titlebar">
+        <div>
+            <div class="app-title">灰蓝的钢神 · 地图棋盘</div>
+            <div class="app-subtitle">1.15 关闭房间版 · 地形 / 标记 / 棋子 / WebP / 联机同步</div>
+        </div>
+        <div class="app-subtitle">ESC 可取消当前放置操作</div>
+    </div>
+    <div id="container">
+        <div id="top-coordinates"></div>
+        <div id="left-coordinates"></div>
+        <div id="chessboard"></div>
+    </div>
+    <div class="control-panel">
+        <h2>棋盘设置</h2>
+        <div class="form-group settings-grid">
+            <label>行数</label>
+            <input type="number" id="rows" value="14" min="1">
+
+            <label>列数</label>
+            <input type="number" id="cols" value="14" min="1">
+        </div>
+
+        <div class="form-group settings-grid">
+            <label>行高</label>
+            <input type="number" id="rowHeight" value="90" min="10">
+
+            <label>列宽</label>
+            <input type="number" id="colWidth" value="90" min="10">
+        </div>
+        <div class="section-title">棋盘与棋子</div>
+        <div class="button-row">
+            <button class="primary" onclick="document.getElementById('file-input').click()">＋ 上传棋子</button>
+            <button onclick="updateChessboard()">↻ 更新棋盘</button>
+            <input type="file" id="file-input" accept="image/*" style="display: none;">
+        </div>
+
+        <div class="section-title">联机广播</div>
+        <div class="realtime-box">
+            <div class="realtime-grid">
+                <label for="realtimeName">昵称</label>
+                <input type="text" id="realtimeName" maxlength="24" placeholder="例如：主持人 / 玩家A">
+                <label for="roomCode">房间号</label>
+                <input type="text" id="roomCode" maxlength="24" placeholder="例如：A001">
+            </div>
+            <div class="realtime-actions">
+                <button class="primary" id="hostRoomBtn" onclick="hostRealtimeRoom()">创建 / 主持房间</button>
+                <button id="joinRoomBtn" onclick="joinRealtimeRoomAsViewer()">加入观战</button>
+                <button id="copyRoomBtn" onclick="copyRoomCode()" disabled>复制房间号</button>
+                <button id="leaveRoomBtn" class="danger-soft" onclick="leaveRealtimeRoom()" disabled>离开房间</button>
+                <button id="closeRoomBtn" class="danger-soft wide" onclick="closeRealtimeRoom()" disabled>■ 结束战斗并关闭房间</button>
+            </div>
+            <div id="realtimeRoomBadge" class="realtime-room-badge"></div>
+            <div id="realtimeStatus" class="realtime-status">
+                <span id="realtimeDot" class="realtime-dot"></span>
+                <span id="realtimeStatusText">未联机 · 本地编辑模式</span>
+            </div>
+            <div class="viewer-notice">当前为观战模式：棋盘编辑已锁定，房主的变动会自动同步到这里。</div>
+        </div>
+
+        <div class="section-title">高清截图</div>
+        <div class="screenshot-tools">
+            <select id="screenshotScale" title="截图清晰度">
+                <option value="2">2× 清晰</option>
+                <option value="3" selected>3× 高清</option>
+                <option value="4">4× 超清</option>
+            </select>
+            <select id="webpQuality" title="WebP 压缩质量">
+                <option value="0.70">WebP 70% · 小体积</option>
+                <option value="0.80">WebP 80% · 均衡</option>
+                <option value="0.88" selected>WebP 88% · 推荐</option>
+                <option value="0.95">WebP 95% · 高质量</option>
+            </select>
+            <button class="primary" onclick="captureChessboard('clipboard')">复制截图</button>
+            <button onclick="captureChessboard('download')">下载 WebP</button>
+        </div>
+        <div class="panel-tip">下载默认使用 WebP 88%，通常比 PNG 小很多；复制到剪贴板仍使用 PNG，以保证浏览器兼容性。</div>
+
+        <div class="section-title">编辑模式</div>
+        <div class="button-row">
+            <button id="edit-mode-btn" onclick="toggleEditMode()">进入地形模式</button>
+            <button class="danger-soft" onclick="clearAllStyles()">清除地形</button>
+        </div>
+        <div class="button-row" style="margin-top:8px">
+            <button id="mark-mode-btn" onclick="toggleMarkMode()">进入标记模式</button>
+            <button class="danger-soft" onclick="clearAllMarks()">清除标记</button>
+        </div>
+
+        <div class="section-title">存档</div>
+        <div class="button-row three">
+            <button onclick="exportGame()">导出</button>
+            <button onclick="importGame()">导入</button>
+            <button class="danger-soft" onclick="newGame()">新建</button>
+        </div>
+        <input type="file" id="jsonFile" style="display: none;">
+    </div>
+
+    <div id="right-panel">
+            <div id="style-panel" class="style-panel">
+                <div class="preset-style" data-style="default" onclick="selectStyle('default')">默认</div>
+                <div class="preset-style" data-style="red" style="background:#858896;color:#000000;"
+                    onclick="selectStyle('宇宙')">宇宙</div>
+                <div class="preset-style" data-style="red" style="background:#548235;color:#000000;"
+                    onclick="selectStyle('移动困难')">移动困难</div>
+                <div class="preset-style" data-style="green" style="background:#548235;color:#000000;"
+                    onclick="selectStyle('移动困难平房')">移动困难平房</div>
+                <div class="preset-style" data-style="green" style="background:#548235;color:#000000;"
+                    onclick="selectStyle('移动困难森林')">移动困难森林</div>
+
+                <div class="preset-style" data-style="green" style="background:#bf8f00;color:#000000;"
+                    onclick="selectStyle('障碍物')">障碍物</div>
+                <div class="preset-style" data-style="green" style="background:#bf8f00;color:#000000;"
+                    onclick="selectStyle('障碍物建筑')">障碍物建筑</div>
+                <div class="preset-style" data-style="green" style="background:#bf8f00;color:#000000;"
+                    onclick="selectStyle('障碍物山脉')">障碍物山脉</div>
+                <div class="preset-style" data-style="blue" style="background:#8ea9db;color:#d5e4ff;"
+                    onclick="selectStyle('浅水')">浅水</div>
+                <div class="preset-style" data-style="blue" style="background:#305496;color:#d5e4ff;"
+                    onclick="selectStyle('深水')">深水</div>
+                <div class="preset-style" data-style="blue" style="background:#333f4f;color:#FFFFFF;"
+                    onclick="selectStyle('门')">门</div>
+                <div class="preset-style" data-style="blue" style="background:#222b35;color:#FFFFFF;"
+                    onclick="selectStyle('进入不能')">进入不能</div>
+                <div class="preset-style" data-style="blue" style="background:#ffe699;color:#000000;"
+                    onclick="selectStyle('沙漠')">沙漠</div>
+                <div class="preset-style" data-style="blue" style="background:#ffe699;color:#000000;"
+                    onclick="selectStyle('沙滩')">沙滩</div>
+                <div class="preset-style" data-style="blue" style="background:#c6e0b4;color:#000000;"
+                    onclick="selectStyle('逃脱')">逃脱</div>
+                <div class="preset-style" data-style="blue" style="background:#ffc000;color:#000000;"
+                    onclick="selectStyle('基地')">基地</div>
+                <div class="preset-style" data-style="blue" style="background:#d9d9d9;color:#000000;"
+                    onclick="selectStyle('墙')">墙</div>
+                <div class="preset-style" data-style="blue" style="background:#b9a6be;color:#000000;"
+                    onclick="selectStyle('视界遮蔽')">视界遮蔽</div>
+                <div class="preset-style" data-style="blue" style="background:#d9e1f2;color:#000000;"
+                    onclick="selectStyle('雪地')">雪地</div>
+                <div class="preset-style" data-style="blue" style="background:#80815d;color:#d9d9d9;"
+                    onclick="selectStyle('暗礁宙域')">暗礁宙域</div>
+                <div class="preset-style" data-style="blue" style="background:#6b9cad;color:#d9d9d9;"
+                    onclick="selectStyle('密集宙域')">密集宙域</div>
+            </div>
+            <!-- 添加标记颜色选择面板 -->
+            <div id="mark-panel" class="style-panel">
+                <div class="mark-color red" onclick="selectMarkColor('red')"></div>
+                <div class="mark-color green" onclick="selectMarkColor('green')"></div>
+                <div class="mark-color blue" onclick="selectMarkColor('blue')"></div>
+                <div class="mark-color yellow" onclick="selectMarkColor('yellow')"></div>
+                <div class="mark-color none" onclick="selectMarkColor('none')">×</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentImages = [];
+        const container = document.getElementById('container');
+        const chessboard = document.getElementById('chessboard');
+        const imageInput = document.getElementById('image-input');
+        let selectedImageForMove = null;
+        let isMovingMode = false;
+        let isEditMode = false;
+        let selectedStyle = null;
+        const stylePresets = {
+            default: { bg: '#FFFFFF', color: '', symbol: '' },
+            宇宙: { bg: '#858896', color: '#000000', symbol: '' },
+            移动困难: { bg: '#548235', color: '#000000', symbol: '▼' },
+            移动困难平房: { bg: '#548235', color: '#000000', symbol: '🏠️' },
+            移动困难森林: { bg: '#548235', color: '#000000', symbol: '🌲' },
+            障碍物: { bg: '#bf8f00', color: '#000000', symbol: '▲' },
+            障碍物建筑: { bg: '#bf8f00', color: '#000000', symbol: '🏙️' },
+            障碍物山脉: { bg: '#bf8f00', color: '#000000', symbol: '⛰️' },
+            浅水: { bg: '#8ea9db', color: '#d5e4ff', symbol: '♒︎' },
+            深水: { bg: '#305496', color: '#d5e4ff', symbol: '🌊' },
+            门: { bg: '#333f4f', color: '#FFFFFF', symbol: '🚪' },
+            进入不能: { bg: '#222b35', color: '#FFFFFF', symbol: '⛔️' },
+            沙漠: { bg: '#ffe699', color: '#000000', symbol: '🌵' },
+            沙滩: { bg: '#ffe699', color: '#000000', symbol: '' },
+            逃脱: { bg: '#c6e0b4', color: '#512020', symbol: '⚠︎' },
+            基地: { bg: '#ffc000', color: '#000000', symbol: '☆' },
+            墙: { bg: '#d9d9d9', color: '#000000', symbol: '墙' },
+            视界遮蔽: { bg: '#b9a6be', color: '#000000', symbol: '☁️' },
+            雪地: { bg: '#d9e1f2', color: '#000000', symbol: '❄︎' },
+            暗礁宙域: { bg: '#80815d', color: '#d9d9d9', symbol: '=' },
+            密集宙域: { bg: '#6b9cad', color: '#d9d9d9', symbol: '#' }
+        };
+        // 新增状态变量
+        let isMarkMode = false;
+        let selectedMarkColor = null;
+        let imagePlacementMode = false;
+        let currentImageFile = null;
+        const IMAGE_SPACING = 15; // 图片间距
+        const hintMessage = document.createElement('div');
+        hintMessage.id = 'hint-message';
+        document.body.appendChild(hintMessage);
+        let isDragging = false;
+
+        // 在文件上传事件处理中增加
+        document.getElementById('file-input').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    currentImageFile = reader.result;
+                    imagePlacementMode = true;
+                    showHint("请点击棋盘放置图片\n(ESC键可取消操作)", 3000);
+                    document.addEventListener('keydown', handleImageEsc);
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 修改拖拽结束处理
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                autoAlignImage(currentDraggingElement);
+
+            }
+        });
+
+        // 新增清理函数
+        function cleanupImagePlacement() {
+            imagePlacementMode = false;
+            currentImageFile = null;
+            chessboard.removeEventListener('mousemove', updateHintPosition);
+            hideHint();
+            document.removeEventListener('keydown', handleImageEsc);
+        }
+        // 显示悬浮提示
+        function showHint(message, duration = 2000) {
+            const hint = document.getElementById('hint-message');
+            hint.innerHTML = `
+        <span class="hint-icon">✅</span>
+        <span>${message}</span>
+    `;
+
+            hint.style.display = 'flex';
+            hint.style.animation = 'none';
+            void hint.offsetHeight; // 触发重绘
+            hint.style.animation = `hint-fade ${duration}ms forwards`;
+        }
+        // 隐藏悬浮提示
+        function hideHint() {
+            hintMessage.style.display = 'none';
+        }
+        // 更新提示位置
+        function updateHintPosition(e) {
+            if (!imagePlacementMode) return;
+
+            const rect = chessboard.getBoundingClientRect();
+            const validX = e.clientX >= rect.left && e.clientX <= rect.right;
+            const validY = e.clientY >= rect.top && e.clientY <= rect.bottom;
+
+            if (validX && validY) {
+                hintMessage.style.transform = 'translate(-50%, -30px)'; // 保持居中偏移
+                hintMessage.style.left = e.clientX + 'px';
+                hintMessage.style.top = e.clientY + 'px';
+                hintMessage.style.display = 'block';
+            } else {
+                hintMessage.style.display = 'none';
+            }
+        }
+
+
+        // 新增图片放置逻辑
+        function handleImagePlacement(cell) {
+            if (!imagePlacementMode || !currentImageFile) return;
+
+            const cellRow = cell.dataset.dataRow;
+            const cellCol = cell.dataset.dataCol;
+            const container = document.createElement('div');
+            container.className = 'image-container';
+
+            // 设置坐标偏移量
+            const chessboardRect = chessboard.getBoundingClientRect();
+            const cellRect = cell.getBoundingClientRect();
+
+            // 计算带有偏移量的初始位置
+            container.style.left = `${cellRect.left - chessboardRect.left + cellRect.width / 2 - 40}px`;
+            container.style.top = `${cellRect.top - chessboardRect.top + cellRect.height / 2 - 72}px`;
+
+            // 设置坐标属性
+            container.dataset.cellRow = cellRow;
+            container.dataset.cellCol = cellCol;
+            container.lastDragTimestamp = Date.now();
+
+            const img = new Image();
+            img.src = currentImageFile;
+            img.onload = function () {
+                container.appendChild(img);
+                addDeleteButton(container);
+                chessboard.appendChild(container);
+                currentImages.push(container);
+
+                // 关键修改：启用拖拽功能
+                enableDrag(container);
+
+                // 立即更新布局
+                adjustAllImages();
+            };
+
+            cleanupImagePlacement();
+        }
+        // 添加拖拽功能
+        let currentDraggingElement = null;
+        function enableDrag(element) {
+            let isDragging = false;
+            let startX, startY;
+
+            element.addEventListener('mousedown', (e) => {
+                if (isEditMode || isMarkMode) return;
+
+                isDragging = true;
+                startX = e.clientX - element.offsetLeft;
+                startY = e.clientY - element.offsetTop;
+                element.style.zIndex = '9999'; // 拖拽时置顶
+                element.style.transition = 'none';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                element.style.left = (e.clientX - startX) + 'px';
+                element.style.top = (e.clientY - startY) + 'px';
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    element.lastDragTimestamp = Date.now(); // 新增此行
+                    autoAlignImage(element);
+                    adjustAllImages(); // 确保立即更新
+                }
+            });
+        }
+        // 自动对齐到最近格子
+        function autoAlignImage(imgContainer) {
+            const chessboardRect = chessboard.getBoundingClientRect();
+            const imgRect = imgContainer.getBoundingClientRect();
+
+            // 计算图片中心点
+            const imgCenter = {
+                x: imgRect.left - chessboardRect.left + imgRect.width / 2,
+                y: imgRect.top - chessboardRect.top + imgRect.height / 2
+            };
+
+            let nearestCell = null;
+            let minDistance = Infinity;
+
+            document.querySelectorAll('.cell[data-data-row]').forEach(cell => {
+                const cellRect = cell.getBoundingClientRect();
+                const cellCenter = {
+                    x: cellRect.left - chessboardRect.left + cellRect.width / 2,
+                    y: cellRect.top - chessboardRect.top + cellRect.height / 2
+                };
+
+                const distance = Math.hypot(imgCenter.x - cellCenter.x, imgCenter.y - cellCenter.y);
+
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestCell = {
+                        row: cell.dataset.dataRow,
+                        col: cell.dataset.dataCol,
+                        centerX: cellCenter.x,
+                        centerY: cellCenter.y
+                    };
+                }
+            });
+
+            if (nearestCell) {
+                // 更新图片位置信息
+                imgContainer.dataset.cellRow = nearestCell.row;
+                imgContainer.dataset.cellCol = nearestCell.col;
+                imgContainer.style.left = nearestCell.centerX - 40 + 'px';
+                imgContainer.style.top = nearestCell.centerY - 72 + 'px';
+            }
+        }
+        function adjustAllImages() {
+            const groups = new Map();
+
+            // 1. 分组图片
+            document.querySelectorAll('.image-container').forEach(img => {
+                const key = `${img.dataset.cellRow}-${img.dataset.cellCol}`;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(img);
+            });
+
+            // 2. 单元格排序规则（先列后行，从小到大）
+            const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+                const [rowA, colA] = a.split('-').map(Number);
+                const [rowB, colB] = b.split('-').map(Number);
+
+                // 先比较列（横向坐标）
+                if (colA !== colB) return colA - colB;
+                // 列相同再比较行（纵向坐标）
+                return rowA - rowB;
+            });
+
+            // 3. 按排序设置层级
+            sortedKeys.forEach((key, groupIndex) => {
+                const images = groups.get(key);
+
+                // 按时间排序（旧→新）
+                images.sort((a, b) => a.lastDragTimestamp - b.lastDragTimestamp);
+
+                // 计算布局参数
+                const totalWidth = (images.length - 1) * IMAGE_SPACING;
+                const startX = -totalWidth / 2; // 居中起始位置
+
+                // 设置层级和位置
+                images.forEach((img, imgIndex) => {
+                    // 单元格层级基数：排序越后的单元格层级越高
+                    const cellBaseZ = 100 + groupIndex * 100;
+
+                    // 图片层级：新图片在单元格内层级更高
+                    img.style.zIndex = cellBaseZ + imgIndex;
+
+                    // 水平偏移计算
+                    const offsetX = startX + imgIndex * IMAGE_SPACING;
+                    img.style.transform = `translateX(${offsetX}px)`;
+                });
+            });
+        }
+
+        // 添加删除按钮功能
+        function addDeleteButton(container) {
+            const deleteBtn = document.createElement('div');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.innerHTML = '×';
+            deleteBtn.onclick = () => {
+                container.remove();
+                currentImages = currentImages.filter(img => img !== container);
+                adjustAllImages();
+            };
+            container.appendChild(deleteBtn);
+        }
+
+        // 修改棋盘点击事件
+        chessboard.addEventListener('click', function (e) {
+            const cell = e.target.closest('.cell');
+            if (!cell || cell.classList.contains('coordinate-cell')) return;
+
+            if (imagePlacementMode) {
+                handleImagePlacement(cell);
+                e.stopPropagation();
+            }
+            // 保持原有其他判断...
+        });
+
+
+        // 修改ESC处理
+        function handleImageEsc(e) {
+            if (e.key === 'Escape' && imagePlacementMode) {
+                imagePlacementMode = false;
+                currentImageFile = null;
+                showHint("已取消图片放置操作", 1500);
+                document.removeEventListener('keydown', handleImageEsc);
+            }
+        }
+        // 高清截图：支持 2x/3x/4x；下载使用 WebP，剪贴板保持 PNG 以保证兼容性
+        async function renderChessboardCanvas() {
+            const target = document.getElementById('container');
+            const requestedScale = Math.max(2, Math.min(4, parseInt(document.getElementById('screenshotScale')?.value || '3')));
+            // 防止极大棋盘超过浏览器 Canvas 尺寸上限
+            const maxCanvasSide = 15000;
+            const safeScale = Math.min(
+                requestedScale,
+                maxCanvasSide / Math.max(1, target.scrollWidth),
+                maxCanvasSide / Math.max(1, target.scrollHeight)
+            );
+            const scale = Math.max(1, safeScale);
+
+            // 等待棋子图片完全解码，避免截图时图片偶发缺失或模糊
+            const images = Array.from(target.querySelectorAll('img'));
+            await Promise.all(images.map(img => {
+                if (img.complete) return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+                return new Promise(resolve => {
+                    img.addEventListener('load', resolve, { once: true });
+                    img.addEventListener('error', resolve, { once: true });
+                });
+            }));
+
+            return html2canvas(target, {
+                scale,
+                useCORS: true,
+                allowTaint: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                imageTimeout: 0,
+                removeContainer: true,
+                scrollX: 0,
+                scrollY: 0,
+                onclone: clonedDoc => {
+                    // 截图中隐藏删除按钮、悬浮效果，保持棋盘干净
+                    clonedDoc.querySelectorAll('.delete-btn').forEach(el => el.style.display = 'none');
+                    const clonedContainer = clonedDoc.getElementById('container');
+                    if (clonedContainer) {
+                        clonedContainer.style.filter = 'none';
+                        clonedContainer.style.margin = '0';
+                    }
+                }
+            });
+        }
+
+        function getScreenshotStamp() {
+            const now = new Date();
+            return [
+                now.getFullYear(),
+                String(now.getMonth() + 1).padStart(2, '0'),
+                String(now.getDate()).padStart(2, '0'),
+                '-',
+                String(now.getHours()).padStart(2, '0'),
+                String(now.getMinutes()).padStart(2, '0')
+            ].join('');
+        }
+
+        function canvasToBlob(canvas, type, quality) {
+            return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+        }
+
+        async function downloadCanvasWebP(canvas) {
+            const qualitySelect = document.getElementById('webpQuality');
+            const quality = Math.max(0.1, Math.min(1, parseFloat(qualitySelect?.value || '0.88')));
+            const blob = await canvasToBlob(canvas, 'image/webp', quality);
+            if (!blob || blob.type !== 'image/webp') {
+                throw new Error('当前浏览器无法生成 WebP 图片');
+            }
+
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.download = `灰蓝的钢神_棋盘_${getScreenshotStamp()}.webp`;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+            return {
+                blob,
+                quality: Math.round(quality * 100),
+                sizeKB: Math.max(1, Math.round(blob.size / 1024))
+            };
+        }
+
+        async function captureChessboard(mode = 'clipboard') {
+            try {
+                showHint('正在生成高清棋盘截图…', 1600);
+                const canvas = await renderChessboardCanvas();
+
+                if (mode === 'download') {
+                    const result = await downloadCanvasWebP(canvas);
+                    showHint(`WebP 已生成 · ${result.quality}% · 约 ${result.sizeKB} KB（${canvas.width} × ${canvas.height}）`, 2600);
+                    return;
+                }
+
+                // Chromium 等浏览器对图片剪贴板最稳定的是 PNG，因此复制功能继续使用 PNG。
+                const blob = await canvasToBlob(canvas, 'image/png');
+                if (!blob) throw new Error('无法生成 PNG 剪贴板数据');
+
+                try {
+                    if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+                        throw new Error('当前浏览器不支持图片剪贴板');
+                    }
+                    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                    showHint(`高清截图已复制（${canvas.width} × ${canvas.height}）`, 2200);
+                } catch (clipboardError) {
+                    console.warn('复制到剪贴板失败，自动改为下载 WebP：', clipboardError);
+                    const result = await downloadCanvasWebP(canvas);
+                    showHint(`剪贴板不可用，已自动下载 WebP · ${result.quality}% · 约 ${result.sizeKB} KB`, 3000);
+                }
+            } catch (error) {
+                console.error('截图失败:', error);
+                showHint(error.message || '截图失败，请尝试降低到 2× 清晰度', 3000);
+            }
+        }
+
+        function initChessboard(rows, cols, rowHeight, colWidth) {
+            const totalRows = rows + 1;
+            const totalCols = cols + 1;
+
+            // 保留现有有效单元格
+            const existingCells = new Map();
+            chessboard.querySelectorAll('.cell').forEach(cell => {
+                const row = parseInt(cell.dataset.dataRow || -1);
+                const col = parseInt(cell.dataset.dataCol || -1);
+                if (row >= 0 && col >= 0 && row < rows && col < cols) {
+                    existingCells.set(`${row},${col}`, cell);
+                }
+            });
+
+            // 重建网格结构
+            chessboard.style.gridTemplateColumns = `repeat(${totalCols}, ${colWidth}px)`;
+            chessboard.style.gridTemplateRows = `repeat(${totalRows}, ${rowHeight}px)`;
+            container.style.width = `${totalCols * colWidth}px`;
+
+            // 创建新的单元格容器
+            const newCells = [];
+            for (let i = 0; i < totalRows; i++) {
+                for (let j = 0; j < totalCols; j++) {
+                    const existingCell = existingCells.get(`${i - 1},${j - 1}`);
+                    if (existingCell && i > 0 && j > 0) {
+                        newCells.push(existingCell.cloneNode(true));
+                    } else {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.style.height = `${rowHeight}px`;
+                        cell.style.width = `${colWidth}px`;
+
+                        if (i > 0 && j > 0) {
+                            cell.dataset.dataRow = i - 1;
+                            cell.dataset.dataCol = j - 1;
+                        }
+
+                        if (i === 0 && j > 0) {
+                            cell.classList.add('coordinate-cell');
+                            cell.textContent = String.fromCharCode(64 + j);
+                        } else if (j === 0 && i > 0) {
+                            cell.classList.add('coordinate-cell');
+                            cell.textContent = i;
+                        } else if (i === 0 && j === 0) {
+                            cell.classList.add('coordinate-cell');
+                        }
+
+                        newCells.push(cell);
+                    }
+                }
+            }
+
+            // 批量更新DOM
+            chessboard.replaceChildren(...newCells);
+        }
+
+        // 修改更新棋盘函数
+        function updateChessboard() {
+            const newRows = parseInt(document.getElementById('rows').value) || 14;
+            const newCols = parseInt(document.getElementById('cols').value) || 14;
+            const rowHeight = parseInt(document.getElementById('rowHeight').value) || 90;
+            const colWidth = parseInt(document.getElementById('colWidth').value) || 90;
+
+            // 获取当前棋盘状态
+            const currentState = StateManager.serializeState();
+
+            // 创建临时容器保留有效内容
+            const validCells = [];
+            const validImages = [];
+
+            // 1. 收集有效单元格（在新尺寸范围内的）
+            currentState.cells.forEach(cell => {
+                if (cell.row < newRows && cell.col < newCols) {
+                    validCells.push(cell);
+                }
+            });
+
+            // 2. 收集有效图片（在有效单元格内的）
+            currentState.images.forEach(img => {
+                if (img.cellRow < newRows && img.cellCol < newCols) {
+                    validImages.push(img);
+                }
+            });
+
+            // 3. 重新初始化棋盘（保留坐标单元格）
+            initChessboard(newRows, newCols, rowHeight, colWidth);
+
+            // 4. 延迟恢复有效内容
+            currentImages = [];
+            setTimeout(() => {
+                // 应用保留的单元格样式
+                validCells.forEach(cellState => {
+                    const cell = document.querySelector(
+                        `.cell[data-data-row="${cellState.row}"][data-data-col="${cellState.col}"]`
+                    );
+                    if (cell) {
+                        cell.style.backgroundColor = cellState.style.bgColor;
+                        cell.style.color = cellState.style.color;
+                        if (cellState.style.symbol) {
+                            const symbol = document.createElement('div');
+                            symbol.className = 'style-symbol';
+                            symbol.textContent = cellState.style.symbol;
+                            symbol.style.color = cellState.style.color;
+                            cell.appendChild(symbol);
+                        }
+                        if (cellState.mark) {
+                            const mark = document.createElement('div');
+                            mark.className = 'mark-overlay';
+                            mark.style.backgroundColor = cellState.mark;
+                            cell.appendChild(mark);
+                        }
+                    }
+                });
+
+                // 重建有效图片
+                validImages.forEach(imgState => {
+                    const container = document.createElement('div');
+                    container.className = 'image-container';
+                    container.style.left = `${imgState.left}px`;
+                    container.style.top = `${imgState.top}px`;
+                    container.dataset.cellRow = imgState.cellRow;
+                    container.dataset.cellCol = imgState.cellCol;
+                    container.lastDragTimestamp = imgState.lastDragTimestamp || Date.now();
+                    container.timestamp = imgState.timestamp || container.lastDragTimestamp;
+
+                    const img = new Image();
+                    img.src = imgState.dataURL;
+                    container.appendChild(img);
+                    addDeleteButton(container);
+                    enableDrag(container);
+                    chessboard.appendChild(container);
+                    currentImages.push(container);
+                });
+
+                adjustAllImages();
+            }, 100);
+        }
+        // 切换编辑模式
+        function toggleEditMode() {
+            if (isMarkMode) toggleMarkMode(); // 互斥切换
+            isEditMode = !isEditMode;
+            const btn = document.getElementById('edit-mode-btn');
+            const panel = document.getElementById('style-panel');
+            // 控制图片事件穿透
+            document.querySelectorAll('.image-container').forEach(img => {
+                img.style.pointerEvents = isEditMode ? 'none' : 'auto';
+            });
+            if (isEditMode) {
+                btn.textContent = '退出地形模式';
+                showPanel('style-panel');
+                btn.classList.add('edit-mode-active');
+                panel.style.display = 'block';
+
+                // 绑定ESC事件
+                document.addEventListener('keydown', handleEscPress);
+            } else {
+                btn.textContent = '进入地形模式';
+                showPanel(null);
+                btn.classList.remove('edit-mode-active');
+                panel.style.display = 'none';
+                selectedStyle = null;
+
+                // 解绑事件
+                document.removeEventListener('keydown', handleEscPress);
+            }
+        }
+
+        // 选择预设样式
+        function selectStyle(styleKey) {
+            selectedStyle = styleKey;
+            document.querySelectorAll('.preset-style').forEach(el => {
+                const label = el.textContent.trim();
+                const isSelected = (styleKey === 'default' && label === '默认') || label === styleKey;
+                el.classList.toggle('is-selected', isSelected);
+            });
+        }
+
+        // 应用样式到单元格
+        function applyCellStyle(cell) {
+            if (!selectedStyle || !isEditMode) return;
+
+            const style = stylePresets[selectedStyle];
+
+            // 清除旧样式
+            cell.style.backgroundColor = '';
+            cell.style.color = '';
+            cell.querySelectorAll('.style-symbol').forEach(s => s.remove());
+
+            // 应用新样式
+            if (style.bg) cell.style.backgroundColor = style.bg;
+            if (style.color) cell.style.color = style.color;
+
+            // 添加符号
+            if (style.symbol) {
+                const symbol = document.createElement('div');
+                symbol.className = 'style-symbol';
+                symbol.textContent = style.symbol;
+                cell.appendChild(symbol);
+            }
+
+        }
+
+        // 清除所有样式
+        function clearAllStyles() {
+            chessboard.querySelectorAll('.cell').forEach(cell => {
+                cell.style.backgroundColor = '';
+                cell.style.color = '';
+                cell.querySelectorAll('.style-symbol').forEach(s => s.remove());
+            });
+        }
+
+        // 切换标记模式
+        function toggleMarkMode() {
+            if (isEditMode) toggleEditMode(); // 互斥切换
+            isMarkMode = !isMarkMode;
+            const btn = document.getElementById('mark-mode-btn');
+            const panel = document.getElementById('mark-panel');
+            // 控制图片事件穿透
+            document.querySelectorAll('.image-container').forEach(img => {
+                img.style.pointerEvents = isMarkMode ? 'none' : 'auto';
+            });
+            if (isMarkMode) {
+                btn.textContent = '退出标记模式';
+                showPanel('mark-panel');
+                btn.classList.add('edit-mode-active');
+                panel.style.display = 'block';
+                document.addEventListener('keydown', handleMarkEsc);
+            } else {
+                btn.textContent = '进入标记模式';
+                showPanel(null);
+                btn.classList.remove('edit-mode-active');
+                panel.style.display = 'none';
+                selectedMarkColor = null;
+                document.removeEventListener('keydown', handleMarkEsc);
+            }
+        }
+
+        // 选择标记颜色
+        function selectMarkColor(color) {
+            selectedMarkColor = color;
+            document.querySelectorAll('.mark-color').forEach(el => {
+                el.classList.toggle('selected', el.classList.contains(color));
+            });
+        }
+
+        // 应用标记到单元格
+        function applyMark(cell) {
+            if (!isMarkMode || !selectedMarkColor) return;
+
+            // 移除旧标记
+            const oldMark = cell.querySelector('.mark-overlay');
+            if (oldMark) oldMark.remove();
+
+            // 创建新标记
+            if (selectedMarkColor !== 'none') {
+                const mark = document.createElement('div');
+                mark.className = `mark-overlay ${selectedMarkColor}`;
+                mark.style.backgroundColor = {
+                    red: 'rgba(255,0,0,0.3)',
+                    green: 'rgba(0,255,0,0.3)',
+                    blue: 'rgba(0,0,255,0.3)',
+                    yellow: 'rgba(255,255,0,0.3)'
+                }[selectedMarkColor];
+                cell.appendChild(mark);
+            }
+
+        }
+
+        // 清除所有标记
+        function clearAllMarks() {
+            chessboard.querySelectorAll('.mark-overlay').forEach(mark => mark.remove());
+        }
+
+        // 修改棋盘点击事件（在原有事件前添加）
+        chessboard.addEventListener('click', function (e) {
+            const cell = e.target.closest('.cell');
+            if (!cell || cell.classList.contains('coordinate-cell')) return;
+
+            // 优先处理标记模式
+            if (isMarkMode) {
+                applyMark(cell);
+                e.stopPropagation();
+                return;
+            }
+            // 背景模式
+            if (isEditMode && selectedStyle) {
+                const cell = e.target.closest('.cell');
+                if (cell && !cell.classList.contains('coordinate-cell')) {
+                    applyCellStyle(cell);
+                    e.stopPropagation();
+                }
+            }
+        });
+
+        // 统一面板显示控制
+        function showPanel(panelId) {
+            document.querySelectorAll('.style-panel').forEach(panel => {
+                panel.style.display = panel.id === panelId ? 'block' : 'none';
+            });
+        }
+        // 状态管理模块
+        const StateManager = {
+
+            // 序列化当前状态
+            serializeState() {
+                const state = {
+                    version: 1,
+                    meta: {
+                        rows: parseInt(document.getElementById('rows').value),
+                        cols: parseInt(document.getElementById('cols').value),
+                        rowHeight: parseInt(document.getElementById('rowHeight').value),
+                        colWidth: parseInt(document.getElementById('colWidth').value),
+                        timestamp: Date.now()
+                    },
+                    cells: [],
+                    images: []
+                };
+
+                // 序列化单元格状态
+                document.querySelectorAll('.cell[data-data-row]').forEach(cell => {
+                    const cellState = {
+                        row: parseInt(cell.dataset.dataRow),
+                        col: parseInt(cell.dataset.dataCol),
+                        style: {
+                            bgColor: cell.style.backgroundColor || '',
+                            color: cell.style.color || '', // 新增字体颜色
+                            symbol: cell.querySelector('.style-symbol')?.textContent || '',
+                            styleName: Object.entries(stylePresets).find(([name, preset]) =>
+                                preset.bg === cell.style.backgroundColor &&
+                                preset.color === cell.style.color
+                            )?.[0] || 'default' // 新增样式名称
+                        },
+                        mark: cell.querySelector('.mark-overlay')?.style.backgroundColor || ''
+                    };
+                    state.cells.push(cellState);
+                });
+
+                // 序列化图片状态
+                document.querySelectorAll('.image-container').forEach(img => {
+                    const imgState = {
+                        cellRow: parseInt(img.dataset.cellRow),
+                        cellCol: parseInt(img.dataset.cellCol),
+                        left: parseFloat(img.style.left),
+                        top: parseFloat(img.style.top),
+                        dataURL: img.querySelector('img').src,
+                        lastDragTimestamp: img.lastDragTimestamp || Date.now(), // 兼容旧数据
+                        timestamp: img.timestamp
+                    };
+                    state.images.push(imgState);
+                });
+
+                return state;
+            },
+
+
+            // 应用存档状态
+            applyState(state) {
+                if (!state?.meta || !Array.isArray(state.cells) || !Array.isArray(state.images)) {
+                    throw new Error('存档结构无效');
+                }
+
+                document.getElementById('rows').value = state.meta.rows;
+                document.getElementById('cols').value = state.meta.cols;
+                document.getElementById('rowHeight').value = state.meta.rowHeight;
+                document.getElementById('colWidth').value = state.meta.colWidth;
+
+                // 直接建立一个干净棋盘，避免导入时混入当前棋盘内容
+                currentImages = [];
+                chessboard.innerHTML = '';
+                initChessboard(state.meta.rows, state.meta.cols, state.meta.rowHeight, state.meta.colWidth);
+
+                state.cells.forEach(cellState => {
+                    const cell = document.querySelector(
+                        `.cell[data-data-row="${cellState.row}"][data-data-col="${cellState.col}"]`
+                    );
+                    if (!cell) return;
+
+                    cell.style.backgroundColor = cellState.style?.bgColor || '';
+                    cell.style.color = cellState.style?.color || '';
+
+                    if (cellState.style?.symbol) {
+                        const symbol = document.createElement('div');
+                        symbol.className = 'style-symbol';
+                        symbol.textContent = cellState.style.symbol;
+                        symbol.style.color = cellState.style.color || '';
+                        cell.appendChild(symbol);
+                    }
+
+                    if (cellState.mark) {
+                        const mark = document.createElement('div');
+                        mark.className = 'mark-overlay';
+                        mark.style.backgroundColor = cellState.mark;
+                        cell.appendChild(mark);
+                    }
+                });
+
+                [...state.images]
+                    .sort((a, b) => (a.timestamp || a.lastDragTimestamp || 0) - (b.timestamp || b.lastDragTimestamp || 0))
+                    .forEach(imgState => {
+                        const imgContainer = document.createElement('div');
+                        imgContainer.className = 'image-container';
+                        imgContainer.style.left = `${imgState.left}px`;
+                        imgContainer.style.top = `${imgState.top}px`;
+                        imgContainer.dataset.cellRow = imgState.cellRow;
+                        imgContainer.dataset.cellCol = imgState.cellCol;
+                        imgContainer.timestamp = imgState.timestamp || Date.now();
+                        imgContainer.lastDragTimestamp = imgState.lastDragTimestamp || imgContainer.timestamp;
+
+                        const img = new Image();
+                        img.src = imgState.dataURL;
+                        imgContainer.appendChild(img);
+                        addDeleteButton(imgContainer);
+                        enableDrag(imgContainer);
+                        chessboard.appendChild(imgContainer);
+                        currentImages.push(imgContainer);
+                    });
+
+                adjustAllImages();
+                if (!window.__realtimeApplyingRemote) showHint('存档已成功导入', 1800);
+            }
+        };
+
+        function exportGame() {
+            const state = StateManager.serializeState();
+            const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `chessboard_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showHint('存档已导出', 1600);
+        }
+
+        function importGame() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+
+                reader.onload = () => {
+                    try {
+                        const state = JSON.parse(reader.result);
+                        StateManager.applyState(state);
+                    } catch (e) {
+                        console.error(e);
+                        showHint('存档文件无效或已损坏', 2600);
+                    }
+                };
+
+                reader.readAsText(file);
+            };
+
+            input.click();
+        }
+
+        function newGame() {
+            // 重置输入值
+            document.getElementById('rows').value = 14;
+            document.getElementById('cols').value = 14;
+            document.getElementById('rowHeight').value = 90;
+            document.getElementById('colWidth').value = 90;
+
+            // 清除现有状态
+            currentImages = [];
+            chessboard.innerHTML = '';
+            updateChessboard();
+            clearAllStyles();
+            clearAllMarks();
+            showHint('已新建空白棋盘', 1600);
+        }
+
+        // 动态创建标记元素的函数修改
+        function createMarkColor(color, clickHandler) {
+            const colorDiv = document.createElement('div');
+            colorDiv.className = `mark-color ${color}`;
+            colorDiv.onclick = clickHandler;
+
+            // 添加序号标签
+            const counter = document.createElement('span');
+            counter.style.cssText = 'position:absolute; left:2px; top:2px; font-size:12px; color:#666;';
+            colorDiv.appendChild(counter);
+
+            return colorDiv;
+        }
+
+        // 在初始化标记面板时添加自动编号
+        function initMarkPanel() {
+            const markPanel = document.getElementById('mark-panel');
+            let count = 1;
+
+            ['red', 'green', 'blue', 'yellow', /* 添加更多颜色... */].forEach(color => {
+                const element = createMarkColor(color, () => selectMarkColor(color));
+                element.querySelector('span').textContent = count++;
+                markPanel.appendChild(element);
+            });
+
+            // 当超过10个时自动分列
+            if (markPanel.children.length > 10) {
+                markPanel.style.gridTemplateRows = `repeat(${Math.ceil(markPanel.children.length / 10)}, 1fr)`;
+            }
+        }
+
+        updateChessboard();
+    </script>
+
+
+    <!-- 1.15 Supabase Realtime：Broadcast + Presence + 房主关闭房间 -->
+    <script>
+        (() => {
+            const SUPABASE_URL = 'https://wojnypazfiiodbrfhmqs.supabase.co';
+            const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_M5-SApxPtp-WBcShHAZZlQ_j_lu2LxN';
+            const SNAPSHOT_CHUNK_SIZE = 100000; // 低于 Free 方案 256KB Broadcast 上限，留出 JSON 包装余量
+            const SYNC_DEBOUNCE_MS = 650;
+
+            const clientId = (crypto.randomUUID ? crypto.randomUUID() : `client-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+            const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+                auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+            });
+
+            let realtimeChannel = null;
+            let realtimeRole = 'offline'; // offline | host | viewer
+            let realtimeRoom = '';
+            let realtimeConnected = false;
+            let realtimeOnlineCount = 0;
+            let realtimeHostPresent = false;
+            let syncTimer = null;
+            let syncSending = false;
+            let syncAgain = false;
+            let snapshotSequence = 0;
+            let lastAppliedSequence = -1;
+            let lastSyncRequestAt = 0;
+            let receivedInitialState = false;
+            const incomingSnapshots = new Map();
+
+            const $ = id => document.getElementById(id);
+
+            function cleanRoomCode(value) {
+                return String(value || '')
+                    .trim()
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9_-]/g, '')
+                    .slice(0, 24);
+            }
+
+            function randomRoomCode() {
+                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                let code = '';
+                for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+                return code;
+            }
+
+            function getDisplayName() {
+                const name = $('realtimeName')?.value.trim();
+                return name || (realtimeRole === 'host' ? '房主' : '观众');
+            }
+
+            function setConnectionStatus(kind, text) {
+                const dot = $('realtimeDot');
+                const statusText = $('realtimeStatusText');
+                if (dot) dot.className = `realtime-dot${kind ? ' ' + kind : ''}`;
+                if (statusText) statusText.textContent = text;
+            }
+
+            function editingLocked() {
+                return realtimeConnected && realtimeRole === 'viewer';
+            }
+
+            function setEditControlsLocked(locked) {
+                document.body.classList.toggle('realtime-viewer', locked);
+                ['rows', 'cols', 'rowHeight', 'colWidth', 'file-input', 'edit-mode-btn', 'mark-mode-btn'].forEach(id => {
+                    const el = $(id);
+                    if (el) el.disabled = locked;
+                });
+
+                document.querySelectorAll('.control-panel button').forEach(btn => {
+                    const action = btn.getAttribute('onclick') || '';
+                    const isEditAction = [
+                        "file-input').click", 'updateChessboard()', 'toggleEditMode()', 'clearAllStyles()',
+                        'toggleMarkMode()', 'clearAllMarks()', 'importGame()', 'newGame()'
+                    ].some(x => action.includes(x));
+                    if (isEditAction) btn.disabled = locked;
+                });
+
+                if (locked) {
+                    if (typeof isEditMode !== 'undefined' && isEditMode) toggleEditMode();
+                    if (typeof isMarkMode !== 'undefined' && isMarkMode) toggleMarkMode();
+                    if (typeof cleanupImagePlacement === 'function') cleanupImagePlacement();
+                    document.querySelectorAll('.image-container').forEach(img => img.style.pointerEvents = 'none');
+                } else {
+                    document.querySelectorAll('.image-container').forEach(img => img.style.pointerEvents = 'auto');
+                }
+            }
+
+            function updateRealtimeUI() {
+                const connected = realtimeConnected && !!realtimeChannel;
+                $('leaveRoomBtn').disabled = !connected;
+                $('copyRoomBtn').disabled = !connected;
+                $('closeRoomBtn').disabled = !(connected && realtimeRole === 'host');
+                $('hostRoomBtn').disabled = connected;
+                $('joinRoomBtn').disabled = connected;
+                $('roomCode').disabled = connected;
+                $('realtimeName').disabled = connected;
+
+                const badge = $('realtimeRoomBadge');
+                if (badge) {
+                    if (connected) {
+                        badge.style.display = 'block';
+                        badge.textContent = `房间 ${realtimeRoom} · ${realtimeRole === 'host' ? '房主' : '观战'} · 在线 ${realtimeOnlineCount}`;
+                    } else {
+                        badge.style.display = 'none';
+                        badge.textContent = '';
+                    }
+                }
+
+                setEditControlsLocked(editingLocked());
+            }
+
+            function updatePresenceSummary() {
+                if (!realtimeChannel) return;
+                const state = realtimeChannel.presenceState();
+                const people = Object.values(state).flat();
+                realtimeOnlineCount = people.length;
+                realtimeHostPresent = people.some(p => p.role === 'host');
+                updateRealtimeUI();
+
+                if (!realtimeConnected) return;
+                if (realtimeRole === 'host') {
+                    setConnectionStatus('online', `联机中 · 房主 · 在线 ${realtimeOnlineCount} 人 · 变动自动广播`);
+                } else if (realtimeHostPresent) {
+                    setConnectionStatus('online', `联机中 · 观战 · 在线 ${realtimeOnlineCount} 人 · ${receivedInitialState ? '已同步' : '正在同步房主棋盘'}`);
+                    if (!receivedInitialState && Date.now() - lastSyncRequestAt > 1800) requestHostSnapshot();
+                } else {
+                    setConnectionStatus('connecting', `已进入房间 · 在线 ${realtimeOnlineCount} 人 · 等待房主上线`);
+                }
+            }
+
+            async function sendBroadcast(event, payload) {
+                if (!realtimeChannel || !realtimeConnected) return false;
+                try {
+                    const result = await realtimeChannel.send({ type: 'broadcast', event, payload });
+                    return result === 'ok' || result === undefined;
+                } catch (error) {
+                    console.error('Realtime broadcast failed:', error);
+                    return false;
+                }
+            }
+
+            async function requestHostSnapshot() {
+                if (!realtimeChannel || realtimeRole !== 'viewer') return;
+                lastSyncRequestAt = Date.now();
+                await sendBroadcast('sync_request', { requesterId: clientId, requestedAt: Date.now() });
+            }
+
+            async function sendSnapshot(targetId = '*', reason = 'change') {
+                if (!realtimeConnected || realtimeRole !== 'host' || !realtimeChannel) return;
+
+                if (syncSending) {
+                    syncAgain = true;
+                    return;
+                }
+
+                syncSending = true;
+                try {
+                    const state = StateManager.serializeState();
+                    const json = JSON.stringify(state);
+                    const chunks = [];
+                    for (let i = 0; i < json.length; i += SNAPSHOT_CHUNK_SIZE) {
+                        chunks.push(json.slice(i, i + SNAPSHOT_CHUNK_SIZE));
+                    }
+                    const syncId = `${clientId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                    const sequence = ++snapshotSequence;
+
+                    for (let index = 0; index < chunks.length; index++) {
+                        await sendBroadcast('state_chunk', {
+                            senderId: clientId,
+                            targetId,
+                            syncId,
+                            sequence,
+                            index,
+                            total: chunks.length,
+                            reason,
+                            data: chunks[index]
+                        });
+                    }
+                } catch (error) {
+                    console.error('发送棋盘同步失败:', error);
+                    setConnectionStatus('connecting', `联机中，但同步失败：${error.message || error}`);
+                } finally {
+                    syncSending = false;
+                    if (syncAgain) {
+                        syncAgain = false;
+                        setTimeout(() => sendSnapshot('*', 'queued-change'), 120);
+                    }
+                }
+            }
+
+            function handleIncomingChunk(payload) {
+                if (!payload || realtimeRole !== 'viewer') return;
+                if (payload.senderId === clientId) return;
+                if (payload.targetId !== '*' && payload.targetId !== clientId) return;
+                if (payload.sequence < lastAppliedSequence) return;
+
+                let entry = incomingSnapshots.get(payload.syncId);
+                if (!entry) {
+                    entry = {
+                        sequence: payload.sequence,
+                        total: payload.total,
+                        chunks: new Array(payload.total),
+                        received: 0,
+                        createdAt: Date.now()
+                    };
+                    incomingSnapshots.set(payload.syncId, entry);
+                }
+
+                if (entry.chunks[payload.index] == null) {
+                    entry.chunks[payload.index] = payload.data;
+                    entry.received++;
+                }
+
+                // 清理过期的未完成缓冲
+                for (const [id, item] of incomingSnapshots) {
+                    if (Date.now() - item.createdAt > 30000) incomingSnapshots.delete(id);
+                }
+
+                if (entry.received !== entry.total) return;
+                incomingSnapshots.delete(payload.syncId);
+                if (entry.sequence < lastAppliedSequence) return;
+
+                try {
+                    const state = JSON.parse(entry.chunks.join(''));
+                    window.__realtimeApplyingRemote = true;
+                    StateManager.applyState(state);
+                    lastAppliedSequence = entry.sequence;
+                    receivedInitialState = true;
+                    setEditControlsLocked(true);
+                    setConnectionStatus('online', `联机中 · 观战 · 在线 ${realtimeOnlineCount} 人 · 刚刚已同步`);
+                } catch (error) {
+                    console.error('接收棋盘状态失败:', error);
+                    setConnectionStatus('connecting', '收到同步数据，但应用失败，请重新加入房间');
+                } finally {
+                    window.__realtimeApplyingRemote = false;
+                }
+            }
+
+            function scheduleHostSnapshot() {
+                if (!realtimeConnected || realtimeRole !== 'host' || window.__realtimeApplyingRemote) return;
+                clearTimeout(syncTimer);
+                syncTimer = setTimeout(() => sendSnapshot('*', 'board-change'), SYNC_DEBOUNCE_MS);
+            }
+
+            const boardObserver = new MutationObserver(() => scheduleHostSnapshot());
+            boardObserver.observe(chessboard, {
+                subtree: true,
+                childList: true,
+                attributes: true,
+                attributeFilter: ['style', 'class', 'data-cell-row', 'data-cell-col']
+            });
+
+            async function connectRealtime(role) {
+                if (!supabaseClient) {
+                    showHint('Supabase 客户端加载失败，请检查网络连接', 3000);
+                    return;
+                }
+
+                let room = cleanRoomCode($('roomCode').value);
+                if (role === 'host' && !room) room = randomRoomCode();
+                if (!room) {
+                    showHint('请输入房间号', 1800);
+                    $('roomCode').focus();
+                    return;
+                }
+                $('roomCode').value = room;
+
+                if (realtimeChannel) await window.leaveRealtimeRoom();
+
+                realtimeRole = role;
+                realtimeRoom = room;
+                realtimeConnected = false;
+                realtimeOnlineCount = 0;
+                realtimeHostPresent = false;
+                receivedInitialState = role === 'host';
+                lastAppliedSequence = -1;
+                incomingSnapshots.clear();
+                setConnectionStatus('connecting', '正在连接实时房间…');
+                updateRealtimeUI();
+
+                realtimeChannel = supabaseClient.channel(`steel-board:${room}`, {
+                    config: {
+                        broadcast: { self: false, ack: true },
+                        presence: { key: clientId }
+                    }
+                });
+
+                realtimeChannel
+                    .on('broadcast', { event: 'sync_request' }, ({ payload }) => {
+                        if (realtimeRole === 'host' && payload?.requesterId && payload.requesterId !== clientId) {
+                            sendSnapshot(payload.requesterId, 'join-sync');
+                        }
+                    })
+                    .on('broadcast', { event: 'state_chunk' }, ({ payload }) => handleIncomingChunk(payload))
+                    .on('broadcast', { event: 'room_closed' }, async ({ payload }) => {
+                        if (!realtimeConnected || realtimeRole !== 'viewer') return;
+                        const closedRoom = realtimeRoom;
+                        const closedBy = payload?.closedBy || '房主';
+                        await leaveRealtimeRoomInternal({
+                            statusText: `房间 ${closedRoom} 已关闭 · 当前棋盘已保留`,
+                            hintText: `${closedBy} 已结束战斗，房间已关闭`,
+                            keepRoomCode: true
+                        });
+                    })
+                    .on('presence', { event: 'sync' }, updatePresenceSummary)
+                    .on('presence', { event: 'join' }, updatePresenceSummary)
+                    .on('presence', { event: 'leave' }, updatePresenceSummary)
+                    .subscribe(async (status, error) => {
+                        if (status === 'SUBSCRIBED') {
+                            realtimeConnected = true;
+                            await realtimeChannel.track({
+                                clientId,
+                                role: realtimeRole,
+                                name: getDisplayName(),
+                                joinedAt: new Date().toISOString()
+                            });
+                            updatePresenceSummary();
+                            updateRealtimeUI();
+
+                            if (realtimeRole === 'viewer') {
+                                setEditControlsLocked(true);
+                                await requestHostSnapshot();
+                            } else {
+                                setEditControlsLocked(false);
+                                setConnectionStatus('online', '联机中 · 房主 · 棋盘变动会自动广播');
+                                // 给已在房间中的观众一次主动同步
+                                setTimeout(() => sendSnapshot('*', 'host-online'), 250);
+                            }
+                            showHint(realtimeRole === 'host' ? `房间 ${room} 已创建` : `已加入房间 ${room}`, 1800);
+                        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                            console.error('Realtime channel error:', status, error);
+                            realtimeConnected = false;
+                            setConnectionStatus('', `连接失败：${error?.message || status}`);
+                            updateRealtimeUI();
+                        } else if (status === 'CLOSED') {
+                            realtimeConnected = false;
+                            setConnectionStatus('', '连接已关闭');
+                            updateRealtimeUI();
+                        }
+                    });
+            }
+
+            window.hostRealtimeRoom = () => connectRealtime('host');
+            window.joinRealtimeRoomAsViewer = () => connectRealtime('viewer');
+
+            async function leaveRealtimeRoomInternal(options = {}) {
+                const {
+                    statusText = '未联机 · 本地编辑模式',
+                    hintText = '已离开联机房间',
+                    keepRoomCode = true
+                } = options;
+
+                clearTimeout(syncTimer);
+                if (realtimeChannel) {
+                    try { await realtimeChannel.untrack(); } catch (_) {}
+                    try { await supabaseClient.removeChannel(realtimeChannel); } catch (_) {}
+                }
+                realtimeChannel = null;
+                realtimeRole = 'offline';
+                realtimeRoom = '';
+                realtimeConnected = false;
+                realtimeOnlineCount = 0;
+                realtimeHostPresent = false;
+                receivedInitialState = false;
+                incomingSnapshots.clear();
+                setEditControlsLocked(false);
+                setConnectionStatus('', statusText);
+                updateRealtimeUI();
+                if (!keepRoomCode) $('roomCode').value = '';
+                if (hintText) showHint(hintText, 2600);
+            }
+
+            window.leaveRealtimeRoom = async () => {
+                await leaveRealtimeRoomInternal();
+            };
+
+            window.closeRealtimeRoom = async () => {
+                if (!realtimeConnected || realtimeRole !== 'host' || !realtimeChannel) {
+                    showHint('只有当前房主可以关闭房间', 1800);
+                    return;
+                }
+
+                const room = realtimeRoom;
+                const online = realtimeOnlineCount;
+                const confirmed = window.confirm(
+                    `确定结束本次战斗并关闭房间 ${room} 吗？\n\n` +
+                    `当前在线 ${online} 人。所有观战者将自动退出联机，但会保留最后的棋盘画面。`
+                );
+                if (!confirmed) return;
+
+                const closeBtn = $('closeRoomBtn');
+                if (closeBtn) {
+                    closeBtn.disabled = true;
+                    closeBtn.textContent = '正在关闭房间…';
+                }
+
+                try {
+                    // 尽量等待正在进行的同步结束，随后发送一份最终棋盘状态。
+                    clearTimeout(syncTimer);
+                    const waitStarted = Date.now();
+                    while (syncSending && Date.now() - waitStarted < 2500) {
+                        await new Promise(resolve => setTimeout(resolve, 60));
+                    }
+                    await sendSnapshot('*', 'final-before-close');
+
+                    // 再广播关房事件；send() 开启 ack 后会等待服务端确认。
+                    await sendBroadcast('room_closed', {
+                        room,
+                        closedBy: getDisplayName(),
+                        closedAt: Date.now()
+                    });
+
+                    await leaveRealtimeRoomInternal({
+                        statusText: `房间 ${room} 已关闭 · 当前棋盘已保留`,
+                        hintText: `战斗结束，房间 ${room} 已关闭`,
+                        keepRoomCode: true
+                    });
+                } catch (error) {
+                    console.error('关闭房间失败:', error);
+                    setConnectionStatus('connecting', '关闭房间时出现错误，请重试');
+                    showHint('关闭房间失败，请检查网络后重试', 2500);
+                    updateRealtimeUI();
+                } finally {
+                    if (closeBtn) closeBtn.textContent = '■ 结束战斗并关闭房间';
+                }
+            };
+
+            window.copyRoomCode = async () => {
+                if (!realtimeRoom) return;
+                try {
+                    await navigator.clipboard.writeText(realtimeRoom);
+                    showHint(`房间号 ${realtimeRoom} 已复制`, 1500);
+                } catch (_) {
+                    window.prompt('复制这个房间号发给其他人：', realtimeRoom);
+                }
+            };
+
+            // 观战端阻止棋盘交互；截图、导出仍然可用。
+            document.addEventListener('pointerdown', (event) => {
+                if (!editingLocked()) return;
+                if (event.target.closest('#chessboard .image-container')) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    showHint('当前为观战模式，只有房主可以移动棋子', 1600);
+                }
+            }, true);
+
+            document.addEventListener('click', (event) => {
+                if (!editingLocked()) return;
+                if (event.target.closest('#chessboard') && (isEditMode || isMarkMode || imagePlacementMode)) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    showHint('当前为观战模式，棋盘编辑已锁定', 1600);
+                }
+            }, true);
+
+            // 大尺寸棋子图先压缩为 WebP，避免 Realtime 广播被图片数据撑大。
+            async function fileToDataURL(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            async function optimizePieceImage(file) {
+                const originalDataURL = await fileToDataURL(file);
+                if (file.size <= 120 * 1024) return originalDataURL;
+
+                const source = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = originalDataURL;
+                });
+
+                const maxW = 320;
+                const maxH = 480;
+                const ratio = Math.min(1, maxW / source.naturalWidth, maxH / source.naturalHeight);
+                const width = Math.max(1, Math.round(source.naturalWidth * ratio));
+                const height = Math.max(1, Math.round(source.naturalHeight * ratio));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(source, 0, 0, width, height);
+                const webp = canvas.toDataURL('image/webp', 0.82);
+                return webp.startsWith('data:image/webp') ? webp : originalDataURL;
+            }
+
+            const fileInput = $('file-input');
+            fileInput.addEventListener('change', async (event) => {
+                // capture 阶段拦截 1.13 原监听器，由这里负责读取/压缩。
+                event.stopImmediatePropagation();
+                if (editingLocked()) {
+                    event.target.value = '';
+                    showHint('观战模式不能上传棋子', 1600);
+                    return;
+                }
+                const file = event.target.files?.[0];
+                if (!file) return;
+                try {
+                    showHint('正在优化棋子图片…', 1200);
+                    currentImageFile = await optimizePieceImage(file);
+                    imagePlacementMode = true;
+                    showHint('请点击棋盘放置图片\n(ESC键可取消操作)', 3000);
+                    document.addEventListener('keydown', handleImageEsc);
+                } catch (error) {
+                    console.error('棋子图片处理失败:', error);
+                    showHint('棋子图片读取失败', 2200);
+                } finally {
+                    event.target.value = '';
+                }
+            }, true);
+
+            // 读取 URL 中的 room 参数，方便部署到网页后直接分享房间链接。
+            try {
+                const params = new URLSearchParams(location.search);
+                const roomFromUrl = cleanRoomCode(params.get('room'));
+                if (roomFromUrl) $('roomCode').value = roomFromUrl;
+            } catch (_) {}
+
+            updateRealtimeUI();
+        })();
+    </script>
+
+</body>
+
+</html>
