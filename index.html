@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>灰蓝的钢神地图棋盘 1.14 · 实时广播版</title>
+    <title>灰蓝的钢神地图棋盘 1.16 · 低流量 Storage 版</title>
     <style>
         #top-coordinates,
         #left-coordinates {
@@ -705,7 +705,7 @@
         }
 
     
-        /* 1.15 Realtime 联机面板 */
+        /* 1.16 Realtime / Storage 联机面板 */
         .realtime-box {
             padding: 12px;
             border: 1px solid #b9c8d8;
@@ -814,6 +814,43 @@
         }
         body.realtime-viewer .viewer-notice { display: block; }
 
+        .network-stats {
+            margin-top: 9px;
+            padding: 9px;
+            border-radius: 9px;
+            border: 1px solid #cfdae5;
+            background: rgba(255,255,255,.72);
+            color: #53677a;
+            font-size: 11px;
+            line-height: 1.55;
+        }
+        .network-stats-title {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 5px;
+            color: #36546d;
+            font-weight: 800;
+            font-size: 12px;
+        }
+        .network-stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3px 10px;
+        }
+        .network-stats-grid span:nth-child(even) {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            color: #2f5069;
+            font-weight: 700;
+        }
+        .storage-note {
+            margin-top: 7px;
+            color: #718496;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
     </style>
 </head>
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
@@ -823,7 +860,7 @@
     <div class="app-titlebar">
         <div>
             <div class="app-title">灰蓝的钢神 · 地图棋盘</div>
-            <div class="app-subtitle">1.15 关闭房间版 · 地形 / 标记 / 棋子 / WebP / 联机同步</div>
+            <div class="app-subtitle">1.16 低流量 Storage 版 · 增量同步 / 图片去重 / 网络统计</div>
         </div>
         <div class="app-subtitle">ESC 可取消当前放置操作</div>
     </div>
@@ -868,6 +905,7 @@
                 <button class="primary" id="hostRoomBtn" onclick="hostRealtimeRoom()">创建 / 主持房间</button>
                 <button id="joinRoomBtn" onclick="joinRealtimeRoomAsViewer()">加入观战</button>
                 <button id="copyRoomBtn" onclick="copyRoomCode()" disabled>复制房间号</button>
+                <button id="syncNowBtn" onclick="forceFullSync()" disabled>强制全量同步</button>
                 <button id="leaveRoomBtn" class="danger-soft" onclick="leaveRealtimeRoom()" disabled>离开房间</button>
                 <button id="closeRoomBtn" class="danger-soft wide" onclick="closeRealtimeRoom()" disabled>■ 结束战斗并关闭房间</button>
             </div>
@@ -877,6 +915,18 @@
                 <span id="realtimeStatusText">未联机 · 本地编辑模式</span>
             </div>
             <div class="viewer-notice">当前为观战模式：棋盘编辑已锁定，房主的变动会自动同步到这里。</div>
+            <div class="network-stats" id="networkStats">
+                <div class="network-stats-title"><span>本场网络统计</span><span id="networkModeText">本地</span></div>
+                <div class="network-stats-grid">
+                    <span>Realtime 发送</span><span id="statSent">0 B</span>
+                    <span>Realtime 接收</span><span id="statReceived">0 B</span>
+                    <span>增量事件</span><span id="statDelta">0</span>
+                    <span>完整同步</span><span id="statFullSync">0</span>
+                    <span>Storage 上传</span><span id="statStorage">0 B</span>
+                    <span>素材上传数</span><span id="statAssets">0</span>
+                </div>
+                <div class="storage-note">棋子图片只上传一次到 Storage；移动、地形和标记只广播变化，不再重复发送图片。</div>
+            </div>
         </div>
 
         <div class="section-title">高清截图</div>
@@ -1103,6 +1153,7 @@
             // 设置坐标属性
             container.dataset.cellRow = cellRow;
             container.dataset.cellCol = cellCol;
+            container.dataset.pieceId = (crypto.randomUUID ? crypto.randomUUID() : `piece-${Date.now()}-${Math.random().toString(36).slice(2)}`);
             container.lastDragTimestamp = Date.now();
 
             const img = new Image();
@@ -1516,10 +1567,12 @@
                     container.style.top = `${imgState.top}px`;
                     container.dataset.cellRow = imgState.cellRow;
                     container.dataset.cellCol = imgState.cellCol;
+                    container.dataset.pieceId = imgState.pieceId || (crypto.randomUUID ? crypto.randomUUID() : `piece-${Date.now()}-${Math.random().toString(36).slice(2)}`);
                     container.lastDragTimestamp = imgState.lastDragTimestamp || Date.now();
                     container.timestamp = imgState.timestamp || container.lastDragTimestamp;
 
                     const img = new Image();
+                    if (/^https?:/i.test(imgState.dataURL || '')) img.crossOrigin = 'anonymous';
                     img.src = imgState.dataURL;
                     container.appendChild(img);
                     addDeleteButton(container);
@@ -1734,6 +1787,7 @@
                 // 序列化图片状态
                 document.querySelectorAll('.image-container').forEach(img => {
                     const imgState = {
+                        pieceId: img.dataset.pieceId || '',
                         cellRow: parseInt(img.dataset.cellRow),
                         cellCol: parseInt(img.dataset.cellCol),
                         left: parseFloat(img.style.left),
@@ -1799,10 +1853,12 @@
                         imgContainer.style.top = `${imgState.top}px`;
                         imgContainer.dataset.cellRow = imgState.cellRow;
                         imgContainer.dataset.cellCol = imgState.cellCol;
+                        imgContainer.dataset.pieceId = imgState.pieceId || (crypto.randomUUID ? crypto.randomUUID() : `piece-${Date.now()}-${Math.random().toString(36).slice(2)}`);
                         imgContainer.timestamp = imgState.timestamp || Date.now();
                         imgContainer.lastDragTimestamp = imgState.lastDragTimestamp || imgContainer.timestamp;
 
                         const img = new Image();
+                        if (/^https?:/i.test(imgState.dataURL || '')) img.crossOrigin = 'anonymous';
                         img.src = imgState.dataURL;
                         imgContainer.appendChild(img);
                         addDeleteButton(imgContainer);
@@ -1905,42 +1961,82 @@
     </script>
 
 
-    <!-- 1.15 Supabase Realtime：Broadcast + Presence + 房主关闭房间 -->
+    <!-- 1.16 Supabase：Storage 棋子资源 + Realtime 增量广播 + Presence -->
     <script>
         (() => {
             const SUPABASE_URL = 'https://wojnypazfiiodbrfhmqs.supabase.co';
             const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_M5-SApxPtp-WBcShHAZZlQ_j_lu2LxN';
-            const SNAPSHOT_CHUNK_SIZE = 100000; // 低于 Free 方案 256KB Broadcast 上限，留出 JSON 包装余量
-            const SYNC_DEBOUNCE_MS = 650;
+            const STORAGE_BUCKET = 'chess-pieces';
+            const SNAPSHOT_CHUNK_SIZE = 100000;
+            const DELTA_DEBOUNCE_MS = 260;
+            const LARGE_DELTA_CELL_THRESHOLD = 80;
+            const LARGE_DELTA_IMAGE_THRESHOLD = 24;
 
             const clientId = (crypto.randomUUID ? crypto.randomUUID() : `client-${Date.now()}-${Math.random().toString(36).slice(2)}`);
             const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-                auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+                auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
             });
 
             let realtimeChannel = null;
-            let realtimeRole = 'offline'; // offline | host | viewer
+            let realtimeRole = 'offline';
             let realtimeRoom = '';
             let realtimeConnected = false;
             let realtimeOnlineCount = 0;
             let realtimeHostPresent = false;
-            let syncTimer = null;
-            let syncSending = false;
-            let syncAgain = false;
-            let snapshotSequence = 0;
-            let lastAppliedSequence = -1;
-            let lastSyncRequestAt = 0;
             let receivedInitialState = false;
+            let lastSyncRequestAt = 0;
+            let fullSyncSequence = 0;
+            let lastAppliedFullSyncSequence = 0;
+            let deltaSequence = 0;
+            let lastAppliedDeltaSequence = 0;
+            let deltaTimer = null;
+            let fullSyncSending = false;
+            let assetMigrationRunning = false;
+            let hostBaseline = null;
             const incomingSnapshots = new Map();
+            const pendingDeltas = [];
+            const assetUrlCache = new Map();
+
+            const stats = {
+                sentBytes: 0,
+                receivedBytes: 0,
+                deltaSent: 0,
+                deltaReceived: 0,
+                fullSyncSent: 0,
+                fullSyncReceived: 0,
+                storageBytes: 0,
+                assetsUploaded: 0
+            };
 
             const $ = id => document.getElementById(id);
+            const utf8Bytes = value => new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value)).length;
+
+            function formatBytes(bytes) {
+                if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+                const units = ['B', 'KB', 'MB', 'GB'];
+                let value = bytes;
+                let unit = 0;
+                while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+                return `${value >= 100 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
+            }
+
+            function updateNetworkStats() {
+                if ($('statSent')) $('statSent').textContent = formatBytes(stats.sentBytes);
+                if ($('statReceived')) $('statReceived').textContent = formatBytes(stats.receivedBytes);
+                if ($('statDelta')) $('statDelta').textContent = realtimeRole === 'viewer' ? stats.deltaReceived : stats.deltaSent;
+                if ($('statFullSync')) $('statFullSync').textContent = realtimeRole === 'viewer' ? stats.fullSyncReceived : stats.fullSyncSent;
+                if ($('statStorage')) $('statStorage').textContent = formatBytes(stats.storageBytes);
+                if ($('statAssets')) $('statAssets').textContent = String(stats.assetsUploaded);
+                if ($('networkModeText')) $('networkModeText').textContent = realtimeRole === 'host' ? '房主' : realtimeRole === 'viewer' ? '观战' : '本地';
+            }
+
+            function resetNetworkStats() {
+                Object.keys(stats).forEach(k => stats[k] = 0);
+                updateNetworkStats();
+            }
 
             function cleanRoomCode(value) {
-                return String(value || '')
-                    .trim()
-                    .toUpperCase()
-                    .replace(/[^A-Z0-9_-]/g, '')
-                    .slice(0, 24);
+                return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24);
             }
 
             function randomRoomCode() {
@@ -1949,6 +2045,11 @@
                 for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
                 return code;
             }
+
+            function makePieceId() {
+                return crypto.randomUUID ? crypto.randomUUID() : `piece-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            }
+            window.__makePieceId = makePieceId;
 
             function getDisplayName() {
                 const name = $('realtimeName')?.value.trim();
@@ -1972,7 +2073,6 @@
                     const el = $(id);
                     if (el) el.disabled = locked;
                 });
-
                 document.querySelectorAll('.control-panel button').forEach(btn => {
                     const action = btn.getAttribute('onclick') || '';
                     const isEditAction = [
@@ -1981,7 +2081,6 @@
                     ].some(x => action.includes(x));
                     if (isEditAction) btn.disabled = locked;
                 });
-
                 if (locked) {
                     if (typeof isEditMode !== 'undefined' && isEditMode) toggleEditMode();
                     if (typeof isMarkMode !== 'undefined' && isMarkMode) toggleMarkMode();
@@ -1996,12 +2095,12 @@
                 const connected = realtimeConnected && !!realtimeChannel;
                 $('leaveRoomBtn').disabled = !connected;
                 $('copyRoomBtn').disabled = !connected;
+                $('syncNowBtn').disabled = !(connected && realtimeRole === 'host');
                 $('closeRoomBtn').disabled = !(connected && realtimeRole === 'host');
                 $('hostRoomBtn').disabled = connected;
                 $('joinRoomBtn').disabled = connected;
                 $('roomCode').disabled = connected;
                 $('realtimeName').disabled = connected;
-
                 const badge = $('realtimeRoomBadge');
                 if (badge) {
                     if (connected) {
@@ -2012,21 +2111,19 @@
                         badge.textContent = '';
                     }
                 }
-
                 setEditControlsLocked(editingLocked());
+                updateNetworkStats();
             }
 
             function updatePresenceSummary() {
                 if (!realtimeChannel) return;
-                const state = realtimeChannel.presenceState();
-                const people = Object.values(state).flat();
+                const people = Object.values(realtimeChannel.presenceState()).flat();
                 realtimeOnlineCount = people.length;
                 realtimeHostPresent = people.some(p => p.role === 'host');
                 updateRealtimeUI();
-
                 if (!realtimeConnected) return;
                 if (realtimeRole === 'host') {
-                    setConnectionStatus('online', `联机中 · 房主 · 在线 ${realtimeOnlineCount} 人 · 变动自动广播`);
+                    setConnectionStatus('online', `联机中 · 房主 · 在线 ${realtimeOnlineCount} 人 · 低流量增量同步`);
                 } else if (realtimeHostPresent) {
                     setConnectionStatus('online', `联机中 · 观战 · 在线 ${realtimeOnlineCount} 人 · ${receivedInitialState ? '已同步' : '正在同步房主棋盘'}`);
                     if (!receivedInitialState && Date.now() - lastSyncRequestAt > 1800) requestHostSnapshot();
@@ -2035,15 +2132,228 @@
                 }
             }
 
+            async function ensureAnonymousSession() {
+                if (!supabaseClient) throw new Error('Supabase 客户端未加载');
+                const { data: sessionData } = await supabaseClient.auth.getSession();
+                if (sessionData?.session?.user) return sessionData.session.user;
+                const { data, error } = await supabaseClient.auth.signInAnonymously();
+                if (error) throw error;
+                if (!data?.user) throw new Error('匿名登录未返回用户');
+                return data.user;
+            }
+
+            function dataURLToBlob(dataURL) {
+                const [header, encoded] = dataURL.split(',');
+                const mime = header.match(/data:([^;]+)/)?.[1] || 'application/octet-stream';
+                const binary = atob(encoded);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                return new Blob([bytes], { type: mime });
+            }
+
+            async function blobToDataURL(blob) {
+                return await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            }
+
+            async function imageBlobToWebP(blob) {
+                const objectURL = URL.createObjectURL(blob);
+                try {
+                    const source = await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = () => reject(new Error('无法读取棋子图片'));
+                        img.src = objectURL;
+                    });
+                    const maxW = 480;
+                    const maxH = 720;
+                    const ratio = Math.min(1, maxW / source.naturalWidth, maxH / source.naturalHeight);
+                    const width = Math.max(1, Math.round(source.naturalWidth * ratio));
+                    const height = Math.max(1, Math.round(source.naturalHeight * ratio));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(source, 0, 0, width, height);
+                    return await new Promise((resolve, reject) => {
+                        canvas.toBlob(result => result ? resolve(result) : reject(new Error('浏览器无法生成 WebP')), 'image/webp', 0.84);
+                    });
+                } finally {
+                    URL.revokeObjectURL(objectURL);
+                }
+            }
+
+            async function sha256Hex(blob) {
+                const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+                return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+            }
+
+            async function uploadPieceBlob(webpBlob) {
+                const user = await ensureAnonymousSession();
+                const hash = await sha256Hex(webpBlob);
+                if (assetUrlCache.has(hash)) return assetUrlCache.get(hash);
+                const path = `${user.id}/${hash}.webp`;
+                const { error } = await supabaseClient.storage.from(STORAGE_BUCKET).upload(path, webpBlob, {
+                    cacheControl: '31536000',
+                    contentType: 'image/webp',
+                    upsert: false
+                });
+                if (error) {
+                    const text = `${error.message || ''} ${error.error || ''}`.toLowerCase();
+                    const duplicate = error.statusCode === '409' || error.status === 409 || text.includes('already exists') || text.includes('duplicate');
+                    if (!duplicate) throw error;
+                } else {
+                    stats.storageBytes += webpBlob.size;
+                    stats.assetsUploaded++;
+                    updateNetworkStats();
+                }
+                const { data } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+                if (!data?.publicUrl) throw new Error('无法取得 Storage 公共 URL');
+                assetUrlCache.set(hash, data.publicUrl);
+                return data.publicUrl;
+            }
+
+            async function optimizeAndStoreFile(file) {
+                const webpBlob = await imageBlobToWebP(file);
+                if (realtimeConnected && realtimeRole === 'host') {
+                    return await uploadPieceBlob(webpBlob);
+                }
+                return await blobToDataURL(webpBlob);
+            }
+
+            async function ensureAllBoardImagesStored() {
+                if (!realtimeConnected || realtimeRole !== 'host') return;
+                if (assetMigrationRunning) {
+                    while (assetMigrationRunning) await new Promise(r => setTimeout(r, 60));
+                    return;
+                }
+                assetMigrationRunning = true;
+                try {
+                    const images = [...document.querySelectorAll('.image-container')];
+                    const dataImages = images.filter(container => container.querySelector('img')?.src?.startsWith('data:'));
+                    if (!dataImages.length) return;
+                    setConnectionStatus('connecting', `正在把 ${dataImages.length} 个本地棋子迁移到 Storage…`);
+                    for (const container of dataImages) {
+                        if (!container.dataset.pieceId) container.dataset.pieceId = makePieceId();
+                        const img = container.querySelector('img');
+                        const rawBlob = dataURLToBlob(img.src);
+                        const webpBlob = rawBlob.type === 'image/webp' ? rawBlob : await imageBlobToWebP(rawBlob);
+                        const url = await uploadPieceBlob(webpBlob);
+                        img.crossOrigin = 'anonymous';
+                        img.src = url;
+                    }
+                    setConnectionStatus('online', `Storage 迁移完成 · ${dataImages.length} 个棋子已改为 URL 引用`);
+                } finally {
+                    assetMigrationRunning = false;
+                }
+            }
+
+            function ensurePieceIds() {
+                document.querySelectorAll('.image-container').forEach(container => {
+                    if (!container.dataset.pieceId) container.dataset.pieceId = makePieceId();
+                });
+            }
+
+            function captureLightState() {
+                ensurePieceIds();
+                const cells = {};
+                document.querySelectorAll('.cell[data-data-row]').forEach(cell => {
+                    const key = `${cell.dataset.dataRow},${cell.dataset.dataCol}`;
+                    const value = {
+                        row: Number(cell.dataset.dataRow),
+                        col: Number(cell.dataset.dataCol),
+                        bg: cell.style.backgroundColor || '',
+                        color: cell.style.color || '',
+                        symbol: cell.querySelector('.style-symbol')?.textContent || '',
+                        mark: cell.querySelector('.mark-overlay')?.style.backgroundColor || ''
+                    };
+                    if (value.bg || value.color || value.symbol || value.mark) cells[key] = value;
+                });
+                const images = {};
+                document.querySelectorAll('.image-container').forEach(container => {
+                    const id = container.dataset.pieceId;
+                    const img = container.querySelector('img');
+                    images[id] = {
+                        pieceId: id,
+                        cellRow: Number(container.dataset.cellRow),
+                        cellCol: Number(container.dataset.cellCol),
+                        left: Number.parseFloat(container.style.left) || 0,
+                        top: Number.parseFloat(container.style.top) || 0,
+                        dataURL: img?.src || '',
+                        lastDragTimestamp: container.lastDragTimestamp || Date.now(),
+                        timestamp: container.timestamp || 0
+                    };
+                });
+                return {
+                    meta: {
+                        rows: Number($('rows').value) || 14,
+                        cols: Number($('cols').value) || 14,
+                        rowHeight: Number($('rowHeight').value) || 90,
+                        colWidth: Number($('colWidth').value) || 90
+                    },
+                    cells,
+                    images
+                };
+            }
+
+            function sameJSON(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+            function diffLightState(before, after) {
+                if (!before) return { needsFull: true };
+                if (!sameJSON(before.meta, after.meta)) return { needsFull: true };
+                const cellUpdates = [];
+                const cellKeys = new Set([...Object.keys(before.cells), ...Object.keys(after.cells)]);
+                for (const key of cellKeys) {
+                    const prev = before.cells[key];
+                    const next = after.cells[key];
+                    if (!sameJSON(prev, next)) {
+                        if (next) cellUpdates.push(next);
+                        else {
+                            const [row, col] = key.split(',').map(Number);
+                            cellUpdates.push({ row, col, bg: '', color: '', symbol: '', mark: '' });
+                        }
+                    }
+                }
+                const pieceAdds = [];
+                const pieceUpdates = [];
+                const pieceDeletes = [];
+                const ids = new Set([...Object.keys(before.images), ...Object.keys(after.images)]);
+                for (const id of ids) {
+                    const prev = before.images[id];
+                    const next = after.images[id];
+                    if (!prev && next) pieceAdds.push(next);
+                    else if (prev && !next) pieceDeletes.push(id);
+                    else if (!sameJSON(prev, next)) pieceUpdates.push(next);
+                }
+                if (cellUpdates.length > LARGE_DELTA_CELL_THRESHOLD || pieceAdds.length + pieceUpdates.length + pieceDeletes.length > LARGE_DELTA_IMAGE_THRESHOLD) {
+                    return { needsFull: true };
+                }
+                return { needsFull: false, cellUpdates, pieceAdds, pieceUpdates, pieceDeletes };
+            }
+
             async function sendBroadcast(event, payload) {
                 if (!realtimeChannel || !realtimeConnected) return false;
+                const bytes = utf8Bytes({ event, payload });
                 try {
                     const result = await realtimeChannel.send({ type: 'broadcast', event, payload });
+                    stats.sentBytes += bytes;
+                    updateNetworkStats();
                     return result === 'ok' || result === undefined;
                 } catch (error) {
                     console.error('Realtime broadcast failed:', error);
                     return false;
                 }
+            }
+
+            function countReceived(event, payload) {
+                stats.receivedBytes += utf8Bytes({ event, payload });
+                updateNetworkStats();
             }
 
             async function requestHostSnapshot() {
@@ -2052,59 +2362,54 @@
                 await sendBroadcast('sync_request', { requesterId: clientId, requestedAt: Date.now() });
             }
 
-            async function sendSnapshot(targetId = '*', reason = 'change') {
+            async function sendSnapshot(targetId = '*', reason = 'manual') {
                 if (!realtimeConnected || realtimeRole !== 'host' || !realtimeChannel) return;
-
-                if (syncSending) {
-                    syncAgain = true;
+                if (fullSyncSending) {
+                    setTimeout(() => sendSnapshot(targetId, reason), 320);
                     return;
                 }
-
-                syncSending = true;
+                fullSyncSending = true;
                 try {
+                    await ensureAllBoardImagesStored();
+                    ensurePieceIds();
+                    const baselineAtCapture = captureLightState();
                     const state = StateManager.serializeState();
                     const json = JSON.stringify(state);
                     const chunks = [];
-                    for (let i = 0; i < json.length; i += SNAPSHOT_CHUNK_SIZE) {
-                        chunks.push(json.slice(i, i + SNAPSHOT_CHUNK_SIZE));
-                    }
+                    for (let i = 0; i < json.length; i += SNAPSHOT_CHUNK_SIZE) chunks.push(json.slice(i, i + SNAPSHOT_CHUNK_SIZE));
                     const syncId = `${clientId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-                    const sequence = ++snapshotSequence;
-
+                    const sequence = ++fullSyncSequence;
+                    const eventSequence = deltaSequence;
                     for (let index = 0; index < chunks.length; index++) {
                         await sendBroadcast('state_chunk', {
-                            senderId: clientId,
-                            targetId,
-                            syncId,
-                            sequence,
-                            index,
-                            total: chunks.length,
-                            reason,
-                            data: chunks[index]
+                            senderId: clientId, targetId, syncId, sequence, eventSequence,
+                            index, total: chunks.length, reason, data: chunks[index]
                         });
                     }
+                    stats.fullSyncSent++;
+                    hostBaseline = baselineAtCapture;
+                    updateNetworkStats();
                 } catch (error) {
-                    console.error('发送棋盘同步失败:', error);
-                    setConnectionStatus('connecting', `联机中，但同步失败：${error.message || error}`);
+                    console.error('发送完整同步失败:', error);
+                    setConnectionStatus('connecting', `完整同步失败：${error.message || error}`);
                 } finally {
-                    syncSending = false;
-                    if (syncAgain) {
-                        syncAgain = false;
-                        setTimeout(() => sendSnapshot('*', 'queued-change'), 120);
-                    }
+                    fullSyncSending = false;
+                    // 完整同步发送期间若又有本地操作，立即比较并补发增量。
+                    scheduleHostDelta();
                 }
             }
 
             function handleIncomingChunk(payload) {
+                countReceived('state_chunk', payload);
                 if (!payload || realtimeRole !== 'viewer') return;
                 if (payload.senderId === clientId) return;
                 if (payload.targetId !== '*' && payload.targetId !== clientId) return;
-                if (payload.sequence < lastAppliedSequence) return;
-
+                if ((payload.sequence || 0) < lastAppliedFullSyncSequence) return;
                 let entry = incomingSnapshots.get(payload.syncId);
                 if (!entry) {
                     entry = {
                         sequence: payload.sequence,
+                        eventSequence: payload.eventSequence || 0,
                         total: payload.total,
                         chunks: new Array(payload.total),
                         received: 0,
@@ -2112,49 +2417,165 @@
                     };
                     incomingSnapshots.set(payload.syncId, entry);
                 }
-
                 if (entry.chunks[payload.index] == null) {
                     entry.chunks[payload.index] = payload.data;
                     entry.received++;
                 }
-
-                // 清理过期的未完成缓冲
-                for (const [id, item] of incomingSnapshots) {
-                    if (Date.now() - item.createdAt > 30000) incomingSnapshots.delete(id);
-                }
-
+                for (const [id, item] of incomingSnapshots) if (Date.now() - item.createdAt > 30000) incomingSnapshots.delete(id);
                 if (entry.received !== entry.total) return;
                 incomingSnapshots.delete(payload.syncId);
-                if (entry.sequence < lastAppliedSequence) return;
-
                 try {
                     const state = JSON.parse(entry.chunks.join(''));
                     window.__realtimeApplyingRemote = true;
                     StateManager.applyState(state);
-                    lastAppliedSequence = entry.sequence;
                     receivedInitialState = true;
+                    lastAppliedFullSyncSequence = Math.max(lastAppliedFullSyncSequence, entry.sequence || 0);
+                    lastAppliedDeltaSequence = Math.max(lastAppliedDeltaSequence, entry.eventSequence);
+                    stats.fullSyncReceived++;
                     setEditControlsLocked(true);
-                    setConnectionStatus('online', `联机中 · 观战 · 在线 ${realtimeOnlineCount} 人 · 刚刚已同步`);
+                    setConnectionStatus('online', `联机中 · 观战 · 在线 ${realtimeOnlineCount} 人 · 已完成同步`);
+                    pendingDeltas.sort((a,b) => a.sequence - b.sequence);
+                    const queued = pendingDeltas.splice(0);
+                    for (const delta of queued) if (delta.sequence > lastAppliedDeltaSequence) applyDelta(delta);
+                    updateNetworkStats();
                 } catch (error) {
                     console.error('接收棋盘状态失败:', error);
-                    setConnectionStatus('connecting', '收到同步数据，但应用失败，请重新加入房间');
+                    setConnectionStatus('connecting', '收到完整同步，但应用失败，可重新加入房间');
                 } finally {
                     window.__realtimeApplyingRemote = false;
                 }
             }
 
-            function scheduleHostSnapshot() {
-                if (!realtimeConnected || realtimeRole !== 'host' || window.__realtimeApplyingRemote) return;
-                clearTimeout(syncTimer);
-                syncTimer = setTimeout(() => sendSnapshot('*', 'board-change'), SYNC_DEBOUNCE_MS);
+            function clearCellToState(cell, state) {
+                cell.style.backgroundColor = state.bg || '';
+                cell.style.color = state.color || '';
+                cell.querySelectorAll('.style-symbol,.mark-overlay').forEach(el => el.remove());
+                if (state.symbol) {
+                    const symbol = document.createElement('div');
+                    symbol.className = 'style-symbol';
+                    symbol.textContent = state.symbol;
+                    symbol.style.color = state.color || '';
+                    cell.appendChild(symbol);
+                }
+                if (state.mark) {
+                    const mark = document.createElement('div');
+                    mark.className = 'mark-overlay';
+                    mark.style.backgroundColor = state.mark;
+                    cell.appendChild(mark);
+                }
             }
 
-            const boardObserver = new MutationObserver(() => scheduleHostSnapshot());
+            function createRemotePiece(piece) {
+                if (document.querySelector(`.image-container[data-piece-id="${CSS.escape(piece.pieceId)}"]`)) return;
+                const container = document.createElement('div');
+                container.className = 'image-container';
+                container.dataset.pieceId = piece.pieceId;
+                container.dataset.cellRow = piece.cellRow;
+                container.dataset.cellCol = piece.cellCol;
+                container.style.left = `${piece.left}px`;
+                container.style.top = `${piece.top}px`;
+                container.timestamp = piece.timestamp || Date.now();
+                container.lastDragTimestamp = piece.lastDragTimestamp || container.timestamp;
+                const img = new Image();
+                if (/^https?:/i.test(piece.dataURL || '')) img.crossOrigin = 'anonymous';
+                img.src = piece.dataURL;
+                container.appendChild(img);
+                addDeleteButton(container);
+                enableDrag(container);
+                chessboard.appendChild(container);
+                currentImages.push(container);
+            }
+
+            function updateRemotePiece(piece) {
+                let container = document.querySelector(`.image-container[data-piece-id="${CSS.escape(piece.pieceId)}"]`);
+                if (!container) return createRemotePiece(piece);
+                container.dataset.cellRow = piece.cellRow;
+                container.dataset.cellCol = piece.cellCol;
+                container.style.left = `${piece.left}px`;
+                container.style.top = `${piece.top}px`;
+                container.lastDragTimestamp = piece.lastDragTimestamp || container.lastDragTimestamp || Date.now();
+                if (piece.timestamp) container.timestamp = piece.timestamp;
+                const img = container.querySelector('img');
+                if (img && piece.dataURL && img.src !== piece.dataURL) {
+                    if (/^https?:/i.test(piece.dataURL)) img.crossOrigin = 'anonymous';
+                    img.src = piece.dataURL;
+                }
+            }
+
+            function applyDelta(delta) {
+                if (!delta || realtimeRole !== 'viewer') return;
+                if (delta.sequence <= lastAppliedDeltaSequence) return;
+                if (!receivedInitialState) {
+                    pendingDeltas.push(delta);
+                    return;
+                }
+                window.__realtimeApplyingRemote = true;
+                try {
+                    (delta.cellUpdates || []).forEach(item => {
+                        const cell = document.querySelector(`.cell[data-data-row="${item.row}"][data-data-col="${item.col}"]`);
+                        if (cell) clearCellToState(cell, item);
+                    });
+                    (delta.pieceDeletes || []).forEach(id => {
+                        const container = document.querySelector(`.image-container[data-piece-id="${CSS.escape(id)}"]`);
+                        if (container) {
+                            currentImages = currentImages.filter(x => x !== container);
+                            container.remove();
+                        }
+                    });
+                    (delta.pieceAdds || []).forEach(createRemotePiece);
+                    (delta.pieceUpdates || []).forEach(updateRemotePiece);
+                    adjustAllImages();
+                    lastAppliedDeltaSequence = delta.sequence;
+                    stats.deltaReceived++;
+                    updateNetworkStats();
+                } finally {
+                    window.__realtimeApplyingRemote = false;
+                }
+            }
+
+            async function flushHostDelta() {
+                if (!realtimeConnected || realtimeRole !== 'host' || window.__realtimeApplyingRemote || fullSyncSending) return;
+                try {
+                    await ensureAllBoardImagesStored();
+                    const current = captureLightState();
+                    const diff = diffLightState(hostBaseline, current);
+                    if (diff.needsFull) {
+                        await sendSnapshot('*', 'large-or-structural-change');
+                        return;
+                    }
+                    if (!diff.cellUpdates.length && !diff.pieceAdds.length && !diff.pieceUpdates.length && !diff.pieceDeletes.length) {
+                        hostBaseline = current;
+                        return;
+                    }
+                    const payload = {
+                        senderId: clientId,
+                        sequence: ++deltaSequence,
+                        sentAt: Date.now(),
+                        ...diff
+                    };
+                    await sendBroadcast('board_delta', payload);
+                    stats.deltaSent++;
+                    hostBaseline = current;
+                    updateNetworkStats();
+                } catch (error) {
+                    console.error('增量同步失败:', error);
+                    setConnectionStatus('connecting', '增量同步失败，将尝试完整同步');
+                    await sendSnapshot('*', 'delta-fallback');
+                }
+            }
+
+            function scheduleHostDelta() {
+                if (!realtimeConnected || realtimeRole !== 'host' || window.__realtimeApplyingRemote) return;
+                clearTimeout(deltaTimer);
+                deltaTimer = setTimeout(flushHostDelta, DELTA_DEBOUNCE_MS);
+            }
+
+            const boardObserver = new MutationObserver(scheduleHostDelta);
             boardObserver.observe(chessboard, {
                 subtree: true,
                 childList: true,
                 attributes: true,
-                attributeFilter: ['style', 'class', 'data-cell-row', 'data-cell-col']
+                attributeFilter: ['style', 'class', 'data-cell-row', 'data-cell-col', 'data-piece-id', 'src']
             });
 
             async function connectRealtime(role) {
@@ -2162,7 +2583,6 @@
                     showHint('Supabase 客户端加载失败，请检查网络连接', 3000);
                     return;
                 }
-
                 let room = cleanRoomCode($('roomCode').value);
                 if (role === 'host' && !room) room = randomRoomCode();
                 if (!room) {
@@ -2171,7 +2591,6 @@
                     return;
                 }
                 $('roomCode').value = room;
-
                 if (realtimeChannel) await window.leaveRealtimeRoom();
 
                 realtimeRole = role;
@@ -2180,26 +2599,45 @@
                 realtimeOnlineCount = 0;
                 realtimeHostPresent = false;
                 receivedInitialState = role === 'host';
-                lastAppliedSequence = -1;
+                lastAppliedDeltaSequence = 0;
+                lastAppliedFullSyncSequence = 0;
+                deltaSequence = 0;
+                hostBaseline = null;
                 incomingSnapshots.clear();
-                setConnectionStatus('connecting', '正在连接实时房间…');
+                pendingDeltas.length = 0;
+                resetNetworkStats();
+                setConnectionStatus('connecting', role === 'host' ? '正在准备 Storage 身份…' : '正在连接实时房间…');
                 updateRealtimeUI();
 
-                realtimeChannel = supabaseClient.channel(`steel-board:${room}`, {
-                    config: {
-                        broadcast: { self: false, ack: true },
-                        presence: { key: clientId }
+                if (role === 'host') {
+                    try {
+                        await ensureAnonymousSession();
+                    } catch (error) {
+                        console.error('匿名登录失败:', error);
+                        realtimeRole = 'offline';
+                        setConnectionStatus('', `匿名登录失败：${error.message || error}`);
+                        updateRealtimeUI();
+                        showHint('无法匿名登录，请检查 Supabase Authentication 设置', 3000);
+                        return;
                     }
+                }
+
+                realtimeChannel = supabaseClient.channel(`steel-board:${room}`, {
+                    config: { broadcast: { self: false, ack: true }, presence: { key: clientId } }
                 });
 
                 realtimeChannel
                     .on('broadcast', { event: 'sync_request' }, ({ payload }) => {
-                        if (realtimeRole === 'host' && payload?.requesterId && payload.requesterId !== clientId) {
-                            sendSnapshot(payload.requesterId, 'join-sync');
-                        }
+                        countReceived('sync_request', payload);
+                        if (realtimeRole === 'host' && payload?.requesterId && payload.requesterId !== clientId) sendSnapshot(payload.requesterId, 'join-sync');
                     })
                     .on('broadcast', { event: 'state_chunk' }, ({ payload }) => handleIncomingChunk(payload))
+                    .on('broadcast', { event: 'board_delta' }, ({ payload }) => {
+                        countReceived('board_delta', payload);
+                        applyDelta(payload);
+                    })
                     .on('broadcast', { event: 'room_closed' }, async ({ payload }) => {
+                        countReceived('room_closed', payload);
                         if (!realtimeConnected || realtimeRole !== 'viewer') return;
                         const closedRoom = realtimeRoom;
                         const closedBy = payload?.closedBy || '房主';
@@ -2215,23 +2653,24 @@
                     .subscribe(async (status, error) => {
                         if (status === 'SUBSCRIBED') {
                             realtimeConnected = true;
-                            await realtimeChannel.track({
-                                clientId,
-                                role: realtimeRole,
-                                name: getDisplayName(),
-                                joinedAt: new Date().toISOString()
-                            });
+                            await realtimeChannel.track({ clientId, role: realtimeRole, name: getDisplayName(), joinedAt: new Date().toISOString() });
                             updatePresenceSummary();
                             updateRealtimeUI();
-
                             if (realtimeRole === 'viewer') {
                                 setEditControlsLocked(true);
                                 await requestHostSnapshot();
                             } else {
                                 setEditControlsLocked(false);
-                                setConnectionStatus('online', '联机中 · 房主 · 棋盘变动会自动广播');
-                                // 给已在房间中的观众一次主动同步
-                                setTimeout(() => sendSnapshot('*', 'host-online'), 250);
+                                try {
+                                    await ensureAllBoardImagesStored();
+                                    hostBaseline = captureLightState();
+                                    setConnectionStatus('online', '联机中 · 房主 · 图片走 Storage，操作走增量广播');
+                                    setTimeout(() => sendSnapshot('*', 'host-online'), 220);
+                                } catch (migrationError) {
+                                    console.error('Storage 准备失败:', migrationError);
+                                    setConnectionStatus('connecting', `Storage 准备失败：${migrationError.message || migrationError}`);
+                                    showHint('棋子上传 Storage 失败，请检查 bucket 与 RLS 配置', 3500);
+                                }
                             }
                             showHint(realtimeRole === 'host' ? `房间 ${room} 已创建` : `已加入房间 ${room}`, 1800);
                         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -2249,15 +2688,16 @@
 
             window.hostRealtimeRoom = () => connectRealtime('host');
             window.joinRealtimeRoomAsViewer = () => connectRealtime('viewer');
+            window.forceFullSync = async () => {
+                if (!realtimeConnected || realtimeRole !== 'host') return;
+                showHint('正在发送完整棋盘状态…', 1200);
+                await sendSnapshot('*', 'manual-force');
+                showHint('完整同步已发送', 1400);
+            };
 
             async function leaveRealtimeRoomInternal(options = {}) {
-                const {
-                    statusText = '未联机 · 本地编辑模式',
-                    hintText = '已离开联机房间',
-                    keepRoomCode = true
-                } = options;
-
-                clearTimeout(syncTimer);
+                const { statusText = '未联机 · 本地编辑模式', hintText = '已离开联机房间', keepRoomCode = true } = options;
+                clearTimeout(deltaTimer);
                 if (realtimeChannel) {
                     try { await realtimeChannel.untrack(); } catch (_) {}
                     try { await supabaseClient.removeChannel(realtimeChannel); } catch (_) {}
@@ -2269,7 +2709,9 @@
                 realtimeOnlineCount = 0;
                 realtimeHostPresent = false;
                 receivedInitialState = false;
+                hostBaseline = null;
                 incomingSnapshots.clear();
+                pendingDeltas.length = 0;
                 setEditControlsLocked(false);
                 setConnectionStatus('', statusText);
                 updateRealtimeUI();
@@ -2277,50 +2719,27 @@
                 if (hintText) showHint(hintText, 2600);
             }
 
-            window.leaveRealtimeRoom = async () => {
-                await leaveRealtimeRoomInternal();
-            };
+            window.leaveRealtimeRoom = async () => leaveRealtimeRoomInternal();
 
             window.closeRealtimeRoom = async () => {
                 if (!realtimeConnected || realtimeRole !== 'host' || !realtimeChannel) {
                     showHint('只有当前房主可以关闭房间', 1800);
                     return;
                 }
-
                 const room = realtimeRoom;
                 const online = realtimeOnlineCount;
-                const confirmed = window.confirm(
-                    `确定结束本次战斗并关闭房间 ${room} 吗？\n\n` +
-                    `当前在线 ${online} 人。所有观战者将自动退出联机，但会保留最后的棋盘画面。`
-                );
+                const confirmed = window.confirm(`确定结束本次战斗并关闭房间 ${room} 吗？\n\n当前在线 ${online} 人。所有观战者会保留最后的棋盘画面。`);
                 if (!confirmed) return;
-
                 const closeBtn = $('closeRoomBtn');
-                if (closeBtn) {
-                    closeBtn.disabled = true;
-                    closeBtn.textContent = '正在关闭房间…';
-                }
-
+                if (closeBtn) { closeBtn.disabled = true; closeBtn.textContent = '正在关闭房间…'; }
                 try {
-                    // 尽量等待正在进行的同步结束，随后发送一份最终棋盘状态。
-                    clearTimeout(syncTimer);
-                    const waitStarted = Date.now();
-                    while (syncSending && Date.now() - waitStarted < 2500) {
-                        await new Promise(resolve => setTimeout(resolve, 60));
-                    }
+                    clearTimeout(deltaTimer);
+                    await flushHostDelta();
                     await sendSnapshot('*', 'final-before-close');
-
-                    // 再广播关房事件；send() 开启 ack 后会等待服务端确认。
-                    await sendBroadcast('room_closed', {
-                        room,
-                        closedBy: getDisplayName(),
-                        closedAt: Date.now()
-                    });
-
+                    await sendBroadcast('room_closed', { room, closedBy: getDisplayName(), closedAt: Date.now() });
                     await leaveRealtimeRoomInternal({
                         statusText: `房间 ${room} 已关闭 · 当前棋盘已保留`,
-                        hintText: `战斗结束，房间 ${room} 已关闭`,
-                        keepRoomCode: true
+                        hintText: `战斗结束，房间 ${room} 已关闭`, keepRoomCode: true
                     });
                 } catch (error) {
                     console.error('关闭房间失败:', error);
@@ -2342,7 +2761,6 @@
                 }
             };
 
-            // 观战端阻止棋盘交互；截图、导出仍然可用。
             document.addEventListener('pointerdown', (event) => {
                 if (!editingLocked()) return;
                 if (event.target.closest('#chessboard .image-container')) {
@@ -2361,46 +2779,8 @@
                 }
             }, true);
 
-            // 大尺寸棋子图先压缩为 WebP，避免 Realtime 广播被图片数据撑大。
-            async function fileToDataURL(file) {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
-            }
-
-            async function optimizePieceImage(file) {
-                const originalDataURL = await fileToDataURL(file);
-                if (file.size <= 120 * 1024) return originalDataURL;
-
-                const source = await new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.onload = () => resolve(img);
-                    img.onerror = reject;
-                    img.src = originalDataURL;
-                });
-
-                const maxW = 320;
-                const maxH = 480;
-                const ratio = Math.min(1, maxW / source.naturalWidth, maxH / source.naturalHeight);
-                const width = Math.max(1, Math.round(source.naturalWidth * ratio));
-                const height = Math.max(1, Math.round(source.naturalHeight * ratio));
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = 'high';
-                ctx.drawImage(source, 0, 0, width, height);
-                const webp = canvas.toDataURL('image/webp', 0.82);
-                return webp.startsWith('data:image/webp') ? webp : originalDataURL;
-            }
-
             const fileInput = $('file-input');
             fileInput.addEventListener('change', async (event) => {
-                // capture 阶段拦截 1.13 原监听器，由这里负责读取/压缩。
                 event.stopImmediatePropagation();
                 if (editingLocked()) {
                     event.target.value = '';
@@ -2410,20 +2790,19 @@
                 const file = event.target.files?.[0];
                 if (!file) return;
                 try {
-                    showHint('正在优化棋子图片…', 1200);
-                    currentImageFile = await optimizePieceImage(file);
+                    showHint(realtimeConnected && realtimeRole === 'host' ? '正在压缩并上传棋子到 Storage…' : '正在压缩棋子图片…', 1600);
+                    currentImageFile = await optimizeAndStoreFile(file);
                     imagePlacementMode = true;
                     showHint('请点击棋盘放置图片\n(ESC键可取消操作)', 3000);
                     document.addEventListener('keydown', handleImageEsc);
                 } catch (error) {
                     console.error('棋子图片处理失败:', error);
-                    showHint('棋子图片读取失败', 2200);
+                    showHint(`棋子处理失败：${error.message || error}`, 3000);
                 } finally {
                     event.target.value = '';
                 }
             }, true);
 
-            // 读取 URL 中的 room 参数，方便部署到网页后直接分享房间链接。
             try {
                 const params = new URLSearchParams(location.search);
                 const roomFromUrl = cleanRoomCode(params.get('room'));
@@ -2431,6 +2810,7 @@
             } catch (_) {}
 
             updateRealtimeUI();
+            updateNetworkStats();
         })();
     </script>
 
