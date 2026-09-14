@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>灰蓝的钢神地图棋盘 1.16 · 低流量 Storage 版</title>
+    <title>灰蓝的钢神地图棋盘 1.17 · 悬浮折叠面板版</title>
     <style>
         #top-coordinates,
         #left-coordinates {
@@ -705,7 +705,7 @@
         }
 
     
-        /* 1.16 Realtime / Storage 联机面板 */
+        /* 1.17 Realtime / Storage 联机面板 */
         .realtime-box {
             padding: 12px;
             border: 1px solid #b9c8d8;
@@ -851,6 +851,137 @@
             line-height: 1.45;
         }
 
+
+        /* 1.17 左侧系统面板：悬浮折叠 */
+        .control-panel {
+            transition: transform .26s cubic-bezier(.2,.8,.2,1), opacity .22s ease, box-shadow .22s ease;
+            will-change: transform;
+        }
+
+        .control-panel h2 {
+            padding-right: 42px;
+        }
+
+        .panel-collapse-btn {
+            position: absolute;
+            top: 13px;
+            right: 13px;
+            width: 34px;
+            min-height: 34px;
+            height: 34px;
+            padding: 0;
+            border-radius: 10px;
+            font-size: 21px;
+            line-height: 1;
+            color: #49637d;
+            background: rgba(241,246,251,.96);
+            box-shadow: none;
+            z-index: 2;
+        }
+
+        .panel-collapse-btn:hover {
+            transform: translateX(-1px);
+            background: #fff;
+        }
+
+        .left-panel-restore {
+            position: fixed;
+            z-index: 22050;
+            left: 10px;
+            top: 86px;
+            width: 48px;
+            min-height: 74px;
+            padding: 8px 5px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border: 1px solid rgba(191,205,219,.96);
+            border-radius: 13px;
+            color: #405b75;
+            background: rgba(255,255,255,.94);
+            box-shadow: 0 9px 24px rgba(39,58,79,.18);
+            backdrop-filter: blur(12px);
+        }
+
+        .left-panel-restore .restore-icon {
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .left-panel-restore .restore-text {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: .04em;
+            writing-mode: vertical-rl;
+        }
+
+        .left-panel-restore:hover {
+            transform: translateX(2px);
+            border-color: #9eb2c6;
+            box-shadow: 0 12px 28px rgba(39,58,79,.22);
+        }
+
+        body.left-panel-collapsed .control-panel {
+            transform: translateX(calc(-100% - 34px));
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        body.left-panel-collapsed .left-panel-restore {
+            display: flex;
+        }
+
+        body.left-panel-collapsed #container {
+            margin-left: 78px;
+            transition: margin-left .26s cubic-bezier(.2,.8,.2,1);
+        }
+
+        body:not(.left-panel-collapsed) #container {
+            transition: margin-left .26s cubic-bezier(.2,.8,.2,1);
+        }
+
+        /* 观战时系统面板收起后，让棋盘更接近可视区中央 */
+        body.realtime-viewer.left-panel-collapsed #container {
+            margin-left: 64px;
+        }
+
+        @media (max-width: 1180px) {
+            .control-panel {
+                position: fixed;
+                left: 12px;
+                top: 74px;
+                bottom: 12px;
+                width: min(318px, calc(100vw - 76px));
+                margin: 0;
+                z-index: 22000;
+            }
+            body.left-panel-collapsed #container,
+            body.realtime-viewer.left-panel-collapsed #container {
+                margin: 26px auto 34px;
+            }
+            .left-panel-restore {
+                top: 76px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .control-panel {
+                width: min(318px, calc(100vw - 60px));
+                left: 8px;
+                top: 70px;
+                bottom: 8px;
+                padding: 15px;
+            }
+            .left-panel-restore {
+                left: 6px;
+                top: 72px;
+                width: 44px;
+                min-height: 68px;
+            }
+        }
+
     </style>
 </head>
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
@@ -860,7 +991,7 @@
     <div class="app-titlebar">
         <div>
             <div class="app-title">灰蓝的钢神 · 地图棋盘</div>
-            <div class="app-subtitle">1.16 低流量 Storage 版 · 增量同步 / 图片去重 / 网络统计</div>
+            <div class="app-subtitle">1.17 悬浮折叠面板版 · 低流量同步 / Storage / 观战视野优化</div>
         </div>
         <div class="app-subtitle">ESC 可取消当前放置操作</div>
     </div>
@@ -869,7 +1000,9 @@
         <div id="left-coordinates"></div>
         <div id="chessboard"></div>
     </div>
-    <div class="control-panel">
+    <div class="control-panel" id="systemPanel">
+        <button id="leftPanelCollapseBtn" class="panel-collapse-btn" type="button"
+            onclick="setLeftPanelCollapsed(true)" title="收起系统面板（快捷键 H）" aria-label="收起系统面板">‹</button>
         <h2>棋盘设置</h2>
         <div class="form-group settings-grid">
             <label>行数</label>
@@ -964,7 +1097,14 @@
             <button class="danger-soft" onclick="newGame()">新建</button>
         </div>
         <input type="file" id="jsonFile" style="display: none;">
+        <div class="panel-tip">提示：可用左上角 ‹ 收起系统面板，或按 H 快速切换；观众加入房间后会自动收起。</div>
     </div>
+
+    <button id="leftPanelRestore" class="left-panel-restore" type="button"
+        onclick="setLeftPanelCollapsed(false)" title="展开系统面板（快捷键 H）" aria-label="展开系统面板">
+        <span class="restore-icon">☰</span>
+        <span class="restore-text">系统</span>
+    </button>
 
     <div id="right-panel">
             <div id="style-panel" class="style-panel">
@@ -1021,6 +1161,45 @@
             </div>
         </div>
     </div>
+
+
+    <script>
+        // 1.17 左侧系统面板折叠控制
+        (() => {
+            const STORAGE_KEY = 'steelBoard:leftPanelCollapsed';
+
+            window.setLeftPanelCollapsed = function (collapsed, options = {}) {
+                const shouldCollapse = !!collapsed;
+                document.body.classList.toggle('left-panel-collapsed', shouldCollapse);
+
+                const collapseBtn = document.getElementById('leftPanelCollapseBtn');
+                const restoreBtn = document.getElementById('leftPanelRestore');
+                if (collapseBtn) collapseBtn.setAttribute('aria-expanded', String(!shouldCollapse));
+                if (restoreBtn) restoreBtn.setAttribute('aria-expanded', String(!shouldCollapse));
+
+                if (options.persist !== false) {
+                    try { localStorage.setItem(STORAGE_KEY, shouldCollapse ? '1' : '0'); } catch (_) {}
+                }
+            };
+
+            window.toggleLeftPanel = function () {
+                window.setLeftPanelCollapsed(!document.body.classList.contains('left-panel-collapsed'));
+            };
+
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved === '1') document.body.classList.add('left-panel-collapsed');
+            } catch (_) {}
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key.toLowerCase() !== 'h' || event.ctrlKey || event.metaKey || event.altKey) return;
+                const tag = event.target?.tagName?.toLowerCase();
+                if (tag === 'input' || tag === 'textarea' || tag === 'select' || event.target?.isContentEditable) return;
+                event.preventDefault();
+                window.toggleLeftPanel();
+            });
+        })();
+    </script>
 
     <script>
         let currentImages = [];
@@ -1961,7 +2140,7 @@
     </script>
 
 
-    <!-- 1.16 Supabase：Storage 棋子资源 + Realtime 增量广播 + Presence -->
+    <!-- 1.17 Supabase：Storage 棋子资源 + Realtime 增量广播 + Presence -->
     <script>
         (() => {
             const SUPABASE_URL = 'https://wojnypazfiiodbrfhmqs.supabase.co';
@@ -2658,6 +2837,10 @@
                             updateRealtimeUI();
                             if (realtimeRole === 'viewer') {
                                 setEditControlsLocked(true);
+                                // 观众进入房间后自动收起系统面板，最大化棋盘视野；不覆盖用户长期偏好。
+                                if (typeof window.setLeftPanelCollapsed === 'function') {
+                                    window.setLeftPanelCollapsed(true, { persist: false });
+                                }
                                 await requestHostSnapshot();
                             } else {
                                 setEditControlsLocked(false);
